@@ -1,0 +1,18 @@
+{
+  "extName": {
+    "message": "JSON Duo",
+    "description": "扩展名称"
+  },
+  "extShortName": {
+    "message": "JSON Duo",
+    "description": "扩展简称"
+  },
+  "extDescription": {
+    "message": "JSON Duo 是双栏 JSON 工作台：左栏粘贴原文、右栏实时预览。自动识别网页中的 JSON 并美化，支持语法高亮、可折叠树、路径复制、转义保留/还原、浅色与深色主题，一键复制或下载。",
+    "description": "扩展描述"
+  },
+  "extTitle": {
+    "message": "JSON Duo",
+    "description": "工具栏图标悬停提示"
+  }
+}

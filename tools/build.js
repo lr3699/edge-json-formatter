@@ -17,7 +17,7 @@ const DIST = path.join(ROOT, 'dist');
 const STAGE = path.join(DIST, 'unpacked');
 
 const INCLUDE_FILES = ['manifest.json', 'README.md', 'PRIVACY.md', 'CHANGELOG.md'];
-const INCLUDE_DIRS = ['src', 'icons'];
+const INCLUDE_DIRS = ['src', 'icons', '_locales'];
 const EXCLUDE = new Set(['icons/store-icon-300.png']);
 
 function rmrf(target) {
@@ -48,9 +48,9 @@ function main() {
   if (!fs.existsSync(manifestPath)) throw new Error('找不到 manifest.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   const version = manifest.version;
-  const zipPath = path.join(DIST, 'json-formatter-pro-' + version + '.zip');
+  const zipPath = path.join(DIST, 'json-duo-' + version + '.zip');
 
-  console.log('打包 JSON 格式化查看器 v' + version + '\n');
+  console.log('打包 JSON Duo v' + version + '\n');
 
   rmrf(STAGE);
   fs.mkdirSync(STAGE, { recursive: true });

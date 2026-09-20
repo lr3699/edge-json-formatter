@@ -77,40 +77,49 @@
       var start = i;
       i++; // 开引号
       var out = '';
+      // 性能要点：必须先 indexOf 定位结束引号，再在「引号界定的一段」里找反斜杠。
+      // 旧版先在全文上 indexOf('\\', i) 找转义——文档里只要没有任何反斜杠，
+      // 这个查找每次都要扫到文档末尾，几十万个短字符串就是 O(n²)，大 JSON 直接卡死。
       while (true) {
-        if (i >= n) fail('字符串缺少结束引号', start);
-        var c = text[i];
-        if (c === '"') {
-          i++;
+        var q = text.indexOf('"', i);
+        if (q === -1) fail('字符串缺少结束引号', start);
+        var run = text.slice(i, q); // 本次结束引号之前的整段
+        var s = run.indexOf('\\');
+        if (s === -1) {
+          // 无转义：整段一次拼接，字符串结束
+          var nl = run.search(/[\n\r]/);
+          if (nl !== -1) fail('字符串中不能出现未转义的换行', i + nl);
+          out += run;
+          i = q + 1;
           break;
         }
-        if (c === '\\') {
-          var e = text[i + 1];
-          switch (e) {
-            case '"': out += '"'; i += 2; break;
-            case '\\': out += '\\'; i += 2; break;
-            case '/': out += '/'; i += 2; break;
-            case 'b': out += '\b'; i += 2; break;
-            case 'f': out += '\f'; i += 2; break;
-            case 'n': out += '\n'; i += 2; break;
-            case 'r': out += '\r'; i += 2; break;
-            case 't': out += '\t'; i += 2; break;
-            case 'u': {
-              var hex = text.substr(i + 2, 4);
-              if (!/^[0-9a-fA-F]{4}$/.test(hex)) fail('无效的 \\u 转义序列', i);
-              out += String.fromCharCode(parseInt(hex, 16));
-              i += 6;
-              break;
-            }
-            default:
-              if (e === undefined) fail('字符串在转义符后意外结束', i);
-              fail('无效的转义字符 “\\' + e + '”', i);
-          }
-          continue;
+        // 段内含转义：先拼无转义前段，再按旧逻辑处理转义符
+        if (s > 0) {
+          var nl2 = run.slice(0, s).search(/[\n\r]/);
+          if (nl2 !== -1) fail('字符串中不能出现未转义的换行', i + nl2);
+          out += run.slice(0, s);
         }
-        if (c === '\n' || c === '\r') fail('字符串中不能出现未转义的换行', i);
-        out += c;
-        i++;
+        var bs = i + s; // 反斜杠绝对位置
+        var e = text[bs + 1];
+        switch (e) {
+          case '"': case '\\': case '/':
+            out += e; i = bs + 2; break;
+          case 'b': out += '\b'; i = bs + 2; break;
+          case 'f': out += '\f'; i = bs + 2; break;
+          case 'n': out += '\n'; i = bs + 2; break;
+          case 'r': out += '\r'; i = bs + 2; break;
+          case 't': out += '\t'; i = bs + 2; break;
+          case 'u': {
+            var hex = text.substr(bs + 2, 4);
+            if (!/^[0-9a-fA-F]{4}$/.test(hex)) fail('无效的 \\u 转义序列', bs);
+            out += String.fromCharCode(parseInt(hex, 16));
+            i = bs + 6;
+            break;
+          }
+          default:
+            if (e === undefined) fail('字符串在转义符后意外结束', bs);
+            fail('无效的转义字符 “\\' + e + '”', bs);
+        }
       }
       return prim('string', out, start, i, depth);
     }
@@ -235,7 +244,15 @@
   /**
    * 宽松化预处理：去注释、单引号转双引号、去尾随逗号、给裸键补引号。
    * 使用带括号栈的状态机，避免误伤字符串内部。
+   *
+   * 性能：裸键匹配必须用 sticky 正则（BARE_KEY）直接在原文上 exec。
+   * 早期写法对每个裸键都先 text.slice(i) 再配全局搜索正则——等于把
+   * 「当前位置到结尾」的整段字符串复制一遍，大 JSON 下是 O(n²)，直接卡死。
+   * 注意：本注释里不能出现正则字面量，否则其结束斜杠会提前终止这个块注释。
    */
+  var BARE_KEY = /[A-Za-z_$][A-Za-z0-9_$]*/y;
+  var WS_RE = /\s/;
+
   function relax(text) {
     var out = [];
     var i = 0;
@@ -333,10 +350,14 @@
       }
 
       if (pendingKey && /[A-Za-z_$]/.test(c)) {
-        var m = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(text.slice(i));
+        // sticky 正则直接在原文上匹配；旧写法 exec(text.slice(i)) 每个裸键
+        // 都复制「当前位置到结尾」的整段字符串，大 JSON 下是 O(n²)。
+        BARE_KEY.lastIndex = i;
+        var m = BARE_KEY.exec(text);
         if (m) {
-          var after = text.slice(i + m[0].length).replace(/^\s+/, '');
-          if (after[0] === ':') {
+          var k = i + m[0].length;
+          while (k < n && WS_RE.test(text[k])) k++;
+          if (text[k] === ':') {
             push('"' + m[0] + '"');
             i += m[0].length;
             continue;

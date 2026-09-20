@@ -18,7 +18,7 @@ const zipMod = require('./zip.js');
 
 const ROOT = path.resolve(__dirname, '..');
 const zipPath = process.argv[2] ||
-  path.join(ROOT, 'dist', 'json-formatter-pro-' + JSON.parse(
+  path.join(ROOT, 'dist', 'json-duo-' + JSON.parse(
     fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8')).version + '.zip');
 
 let errors = 0;

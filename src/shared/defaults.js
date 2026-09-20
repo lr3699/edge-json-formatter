@@ -32,8 +32,10 @@
     monoFont: true,
     /** 右键菜单 */
     contextMenu: true,
-    /** 单个 JSON 体积上限（字节），超过则只提示不自动渲染 */
-    maxAutoSize: 12 * 1024 * 1024
+    /** 单个 JSON 体积上限（字节），超过则只提示不自动渲染。
+     *  20MB：编辑页大输入已绕过 textarea 直接进查看器（查看器分批渲染、
+     *  有行数上限），20MB 内都能流畅自动格式化；超过才提示 Ctrl+Enter 强制。 */
+    maxAutoSize: 20 * 1024 * 1024
   };
 
   NS.STORAGE_KEY = 'jsonFormatterSettings';

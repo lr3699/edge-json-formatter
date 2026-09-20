@@ -1,0 +1,18 @@
+{
+  "extName": {
+    "message": "JSON Duo",
+    "description": "Extension name"
+  },
+  "extShortName": {
+    "message": "JSON Duo",
+    "description": "Extension short name"
+  },
+  "extDescription": {
+    "message": "JSON Duo is a dual-pane JSON workbench: paste raw JSON on the left, see it rendered live on the right. Auto-detects and beautifies JSON on any page with syntax highlighting, a collapsible tree, JSONPath copy, escape keep/restore, light & dark themes, and one-click copy or download.",
+    "description": "Extension description"
+  },
+  "extTitle": {
+    "message": "JSON Duo",
+    "description": "Toolbar icon hover title"
+  }
+}

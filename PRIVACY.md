@@ -1,6 +1,6 @@
 # 隐私政策 / Privacy Policy
 
-**扩展名称：** JSON 格式化查看器 - JSON Formatter Pro
+**扩展名称：** JSON Duo（双栏 JSON 工作台）
 **最后更新：** 2026-09-20
 
 ## 一句话总结

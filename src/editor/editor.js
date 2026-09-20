@@ -24,6 +24,9 @@
   var $ = function (id) { return document.getElementById(id); };
 
   var inputEl = $('input');
+  var rawViewEl = $('rawView');
+  var rawSizerEl = $('rawSizer');
+  var rawContentEl = $('rawContent');
   var viewerHost = $('viewer');
   var welcomeEl = $('welcome');
   var statsEl = $('stats');
@@ -36,6 +39,15 @@
 
   /** 输入变化后自动格式化的防抖间隔 */
   var DEBOUNCE_MS = 220;
+
+  /**
+   * 大输入阈值（字符数）。超过此值的文本不再写回 <textarea> ——
+   * 浏览器对超长文本节点做布局/绘制会阻塞主线程数秒（粘贴 11MB JSON 实测
+   * textarea 重排 + 同步格式化叠加导致 7~11 秒无响应），这是「Ctrl+V 卡顿很久」
+   * 的真正根因。改用「内存文本源 + 虚拟滚动只读原文视图」：原文完整可见、逐行可查，
+   * 但只渲染可视区域，20MB 内也不卡；格式化结果照常进右侧树（查看器已分批渲染）。
+   */
+  var BIG_INPUT_THRESHOLD = 512 * 1024; // 512 KB
 
   /* ---------------- 入场动效参数 ---------------- */
 
@@ -75,6 +87,8 @@
   var debounceTimer = null;
   var animTimer = null;
   var lastRendered = null;
+  /** 内存文本源：小输入与 textarea 同步；大输入只存这里，不写回 textarea */
+  var sourceText = '';
   /** 本次输入事件的来源，决定要不要播放入场动效：'paste' | 'drop' | 'typing' */
   var inputKind = 'typing';
 
@@ -97,13 +111,108 @@
   }
 
   function updateStats() {
-    var text = inputEl.value;
-    var chars = text.length;
+    var chars = sourceText.length;
     if (!chars) {
       statsEl.textContent = '0 字符';
       return;
     }
     statsEl.textContent = chars.toLocaleString('zh-CN') + ' 字符 · ' + formatBytes(chars);
+  }
+
+  /* ---------------- 大输入：虚拟滚动只读原文视图 ---------------- */
+
+  /** 原文视图行高（px），需与 editor.css 中 .raw-line 的 height/line-height 一致 */
+  var RAW_LINE_H = 24;
+  /** 每行在 sourceText 里的起始偏移；rawLineOffsets[i] 是第 i 行的起点 */
+  var rawLineOffsets = [];
+  var rawLineCount = 0;
+
+  function buildLineIndex(text) {
+    var offsets = [0];
+    var i = 0;
+    while (true) {
+      i = text.indexOf('\n', i);
+      if (i === -1) break;
+      offsets.push(i + 1);
+      i++;
+    }
+    return offsets;
+  }
+
+  function rawLineText(i) {
+    var start = rawLineOffsets[i];
+    var end = (i + 1 < rawLineCount) ? rawLineOffsets[i + 1] - 1 : sourceText.length;
+    if (end > start && sourceText.charCodeAt(end - 1) === 13) end--; // 去掉 \r（CRLF）
+    return sourceText.slice(start, end);
+  }
+
+  function padLeft(n, width) {
+    var s = String(n);
+    while (s.length < width) s = ' ' + s;
+    return s;
+  }
+
+  /** 载入大文本：建行索引 + 渲染可视区。行索引用 indexOf 逐行推进，O(行数) 而非逐字符。 */
+  function showRawView() {
+    rawLineOffsets = buildLineIndex(sourceText);
+    rawLineCount = rawLineOffsets.length;
+    rawSizerEl.style.height = (rawLineCount * RAW_LINE_H) + 'px';
+    rawViewEl.scrollTop = 0;
+    renderRawVisible();
+  }
+
+  function hideRawView() {
+    rawViewEl.hidden = true;
+    rawContentEl.textContent = '';
+    rawSizerEl.style.height = '1px';
+    rawLineOffsets = [];
+    rawLineCount = 0;
+  }
+
+  /** 只渲染可视区内的行（上下各多留 30/60 行缓冲，滚动时不露白） */
+  function renderRawVisible() {
+    var viewportH = rawViewEl.clientHeight || 400;
+    var start = Math.max(0, Math.floor(rawViewEl.scrollTop / RAW_LINE_H) - 30);
+    var visible = Math.ceil(viewportH / RAW_LINE_H);
+    var end = Math.min(rawLineCount, start + visible + 60);
+
+    rawContentEl.style.transform = 'translateY(' + (start * RAW_LINE_H) + 'px)';
+    var digits = String(rawLineCount).length;
+    var frag = document.createDocumentFragment();
+    for (var i = start; i < end; i++) {
+      var line = el('div', 'raw-line');
+      line.appendChild(el('span', 'raw-ln', padLeft(i + 1, digits)));
+      line.appendChild(el('span', 'raw-tx', rawLineText(i)));
+      frag.appendChild(line);
+    }
+    rawContentEl.textContent = '';
+    rawContentEl.appendChild(frag);
+  }
+
+  /**
+   * 统一入口：设置输入文本，并按体积决定走「可编辑 textarea」还是
+   * 「虚拟滚动只读原文视图」。大文本绝不进原生 textarea。
+   * @param {string} text 新文本
+   */
+  function setInputText(text) {
+    sourceText = text;
+    if (text.length > BIG_INPUT_THRESHOLD) {
+      inputEl.hidden = true;
+      rawViewEl.hidden = false;
+      showRawView();
+    } else {
+      inputEl.hidden = false;
+      hideRawView();
+      inputEl.value = text;
+    }
+    updateStats();
+  }
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
   }
 
   /* ---------------- 查看器 ---------------- */
@@ -114,6 +223,11 @@
       // 独立页没有「宿主网页」，不需要还原/关闭按钮
       onRestore: null,
       onClose: null,
+      onThemeChange: function (resolved, raw) {
+        // 让主题作用到整个页面（顶栏 / 输入面板 / 背景），而不是只有右侧查看器。
+        // resolved 是「auto」折算后的实际主题（light|dark），raw 是用户选的档位。
+        applyPageTheme(resolved);
+      },
       onSettingsChange: function (patch) {
         Object.assign(settings, patch);
         NS.saveSettings(patch);
@@ -159,7 +273,7 @@
   /* ---------------- 格式化 ---------------- */
 
   function format(force, animate) {
-    var text = inputEl.value;
+    var text = sourceText;
 
     if (!text.trim()) {
       lastRendered = null;
@@ -169,7 +283,7 @@
       return;
     }
 
-    // 超大内容不自动渲染，避免刚粘贴就把页面卡住
+    // 超大内容不自动渲染，避免刚载入就把页面卡住
     if (!force && text.length > settings.maxAutoSize) {
       setPill('is-err', '内容过大');
       setMessage('超过自动格式化上限 ' + formatBytes(settings.maxAutoSize) +
@@ -184,8 +298,11 @@
     var changed = text !== lastRendered;
     lastRendered = text;
 
-    var ok = v.setText(text);
+    doFormat(v, text, animate, changed);
+  }
 
+  function doFormat(v, text, animate, changed) {
+    var ok = v.setText(text);
     if (ok) {
       var st = v.getState();
       setPill('is-ok', st.lenient ? '宽松解析成功' : '格式化成功');
@@ -199,6 +316,15 @@
 
   function scheduleFormat() {
     updateStats();
+    // 超大内容：同步给出「内容过大」提示，不要等 220ms 防抖的 setTimeout——
+    // 那会被浏览器后续的重排推迟，用户看到的反馈就延迟了数秒。
+    if (sourceText.length > settings.maxAutoSize) {
+      setPill('is-err', '内容过大');
+      setMessage('超过自动格式化上限 ' + formatBytes(settings.maxAutoSize) +
+                 '，按 Ctrl+Enter 强制格式化');
+      if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
+      return;
+    }
     // 解析状态只体现在状态胶囊上。不要在这里给面板加 class，
     // 否则连续输入时 220ms 防抖会让面板反复亮灭（就是「窗口闪动」的来源之一）。
     setPill('is-busy', '解析中…');
@@ -220,11 +346,35 @@
   /* ---------------- 输入事件 ---------------- */
 
   inputEl.addEventListener('input', function (e) {
-    // 粘贴与逐字输入区别对待：只有粘贴才播放逐行动效，
-    // 否则连续打字会不停重放动画，很吵。
+    // 大输入模式下 textarea 已被隐藏，不会有 input 事件；正常路径下
+    // 直接读 textarea 的值作为内存源（小文本，实时编辑）。
+    sourceText = inputEl.value;
     if (e && e.inputType === 'insertFromPaste') inputKind = 'paste';
     scheduleFormat();
   });
+
+  // 拦截粘贴：剪贴板文本超过阈值时不写回 textarea（避免浏览器渲染超长文本
+  // 卡死主线程），而是直接存内存源并进入大输入模式。这是「粘贴大 JSON 不卡」
+  // 的关键——文本从剪贴板读进来后，不再经过 textarea 这道昂贵的渲染。
+  // 挂在 document 上而非 textarea：大输入模式下 textarea 被隐藏，焦点会落到
+  // body，粘贴事件只会冒泡到 document；这里统一兜底，用户能直接再粘一份替换。
+  document.addEventListener('paste', function (e) {
+    var cd = e.clipboardData || window.clipboardData;
+    var text = cd && cd.getData ? cd.getData('text/plain') : '';
+    if (!text || text.length <= BIG_INPUT_THRESHOLD) return; // 小文本走 textarea 默认路径
+    e.preventDefault();                 // 阻止浏览器把大文本塞进 textarea
+    setInputText(text);
+    inputKind = 'paste';
+    scheduleFormat();
+  });
+
+  // 虚拟原文视图：滚动与尺寸变化时重渲染可视区
+  rawViewEl.addEventListener('scroll', renderRawVisible, { passive: true });
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(function () {
+      if (!rawViewEl.hidden) renderRawVisible();
+    }).observe(rawViewEl);
+  }
 
   inputEl.addEventListener('keydown', function (e) {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -255,7 +405,8 @@
     if (!file) return;
     var reader = new FileReader();
     reader.onload = function () {
-      inputEl.value = String(reader.result || '');
+      var text = String(reader.result || '');
+      setInputText(text);
       fileInfoEl.textContent = file.name + ' · ' + formatBytes(file.size);
       inputKind = 'drop';
       setMessage('已读入 ' + file.name, 'ok');
@@ -271,7 +422,7 @@
   /* ---------------- 按钮 ---------------- */
 
   $('btnSample').addEventListener('click', function () {
-    inputEl.value = SAMPLE;
+    setInputText(SAMPLE);
     fileInfoEl.textContent = '';
     inputKind = 'drop';   // 视作一次整块替换，播放动效
     setMessage('已载入示例数据', 'ok');
@@ -279,7 +430,10 @@
   });
 
   $('btnClear').addEventListener('click', function () {
+    sourceText = '';
     inputEl.value = '';
+    inputEl.hidden = false;
+    hideRawView();
     fileInfoEl.textContent = '';
     lastRendered = null;
     updateStats();
@@ -445,6 +599,19 @@
 
   /* ---------------- 设置同步 ---------------- */
 
+  /**
+   * 把主题作用到整个编辑页（不只是查看器面板）。
+   * 在 <html> 上挂 data-theme，配合 editor.css 的 html[data-theme="dark"] 覆盖
+   * 全部 token（--page/--panel/--text/--border 等），实现「全局深色」。
+   */
+  function applyPageTheme(resolved) {
+    if (resolved === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+  }
+
   function applySettingsToViewer() {
     if (viewer) viewer.updateOptions(viewerOptions());
   }
@@ -452,6 +619,15 @@
   NS.loadSettings().then(function (loaded) {
     settings = loaded;
     applySettingsToViewer();
+    // viewer 尚未创建时（打开页面还没粘贴内容），也要按已存主题铺底色
+    if (!viewer) {
+      var theme = settings.theme;
+      if (theme === 'auto') {
+        theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'dark' : 'light';
+      }
+      applyPageTheme(theme);
+    }
   });
 
   if (HAS_EXT && chrome.storage && chrome.storage.onChanged) {

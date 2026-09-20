@@ -1,5 +1,5 @@
 /**
- * JSON 查看器：语法高亮 + 可折叠树 + 搜索 + 路径复制 + 转义保留/还原 + 主题。
+ * JSON 查看器：语法高亮 + 可折叠树（默认全展开）+ 路径复制 + 转义保留/还原 + 主题。
  *
  * 视觉规格取自参考设计稿的实测取色：
  *   键名 #92278F（紫）  字符串 #3AB54A（绿）  数字 #20A8E0（浅蓝）
@@ -35,6 +35,16 @@
   /** 正文字号兜底值（px），与 defaults.js 的 fontSize 保持一致 */
   var DEFAULT_FONT_SIZE = 15;
 
+  /**
+   * 分批渲染上限（大 JSON 卡死修复）：
+   *  - MAX_CHUNK：每个容器一次最多渲染多少个子节点，超出部分显示「加载更多」；
+   *  - RENDER_BUDGET：一次渲染动作（初始渲染 / 展开折叠 / 手动加载）总共
+   *    允许创建的 DOM 行数。没有这两道闸门时，一个 10 万项的数组会一次性
+   *    生成几十万个 DOM 节点，页面直接假死。
+   */
+  var MAX_CHUNK = 400;
+  var RENDER_BUDGET = 5000;
+
   /* ------------------------------------------------------------------ *
    * 样式
    * ------------------------------------------------------------------ */
@@ -65,8 +75,6 @@
     '  --jf-primary:#3ab54a;',
     '  --jf-primary-hover:#2f9e3d;',
     '  --jf-key-bg:rgba(146,39,143,.08);',
-    '  --jf-mark:#fff2a8;',
-    '  --jf-mark-cur:#ffd84d;',
     '  --jf-shadow:0 12px 48px rgba(15,23,42,.18);',
     '  position:relative;display:flex;flex-direction:column;height:100%;width:100%;',
     '  background:var(--jf-bg);color:var(--jf-text);',
@@ -85,7 +93,6 @@
     '  --jf-ok:#79d17f;--jf-ok-soft:#16301a;',
     '  --jf-primary:#2f9e3d;--jf-primary-hover:#3ab54a;',
     '  --jf-key-bg:rgba(201,138,212,.14);',
-    '  --jf-mark:#5c4b1a;--jf-mark-cur:#8a6d1f;',
     '  --jf-shadow:0 12px 48px rgba(0,0,0,.55);',
     '}',
     '.jf-root *,.jf-root *::before,.jf-root *::after{box-sizing:border-box;}',
@@ -113,32 +120,16 @@
     '  font-weight:600;padding:0 14px;}',
     '.jf-btn-outline:hover:not([disabled]){background:var(--jf-ok-soft);',
     '  border-color:var(--jf-primary);color:var(--jf-primary);}',
+    /* 工具栏主功能按钮：实心描边，视觉上与正文区分，凸显可点击 */
+    '.jf-btn-solid{height:32px;padding:0 13px;border:1px solid var(--jf-border-strong);',
+    '  border-radius:8px;background:var(--jf-bg);color:var(--jf-text);font-size:13px;font-weight:600;',
+    '  box-shadow:0 1px 2px rgba(0,0,0,.06);}',
+    '.jf-btn-solid:hover:not([disabled]){border-color:var(--jf-accent);',
+    '  background:var(--jf-accent-soft);color:var(--jf-accent);}',
+    /* 启用状态：保留转义开启 / 输出为压缩 / 手动指定主题 */
+    '.jf-btn-solid.jf-btn-on{border-color:var(--jf-accent);background:var(--jf-accent-soft);',
+    '  color:var(--jf-accent);}',
 
-    '.jf-field{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--jf-muted);',
-    '  padding-left:6px;}',
-    '.jf-select{height:30px;padding:0 26px 0 9px;border:1px solid transparent;border-radius:7px;',
-    '  background:transparent;color:var(--jf-text);font:inherit;font-size:12.5px;cursor:pointer;',
-    '  outline:none;appearance:none;-webkit-appearance:none;',
-    '  background-image:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%239aa0a6\' stroke-width=\'2.4\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpath d=\'m6 9 6 6 6-6\'/%3E%3C/svg%3E");',
-    '  background-repeat:no-repeat;background-position:right 7px center;background-size:12px;}',
-    '.jf-select:hover{background-color:var(--jf-accent-soft);color:var(--jf-accent);}',
-    '.jf-select:focus{border-color:var(--jf-accent);}',
-    '.jf-select option{background:var(--jf-bg);color:var(--jf-text);}',
-
-    '.jf-search{position:relative;display:inline-flex;align-items:center;}',
-    '.jf-search input{height:30px;width:180px;padding:0 10px 0 30px;border:1px solid transparent;',
-    '  border-radius:7px;background:var(--jf-bg);color:var(--jf-text);font:inherit;font-size:12.5px;',
-    '  outline:none;transition:border-color .14s,width .18s;}',
-    '.jf-search input::placeholder{color:var(--jf-muted);}',
-    '.jf-search input:focus{border-color:var(--jf-accent);width:220px;}',
-    '.jf-search .jf-search-icon{position:absolute;left:9px;width:14px;height:14px;',
-    '  color:var(--jf-muted);pointer-events:none;}',
-    '.jf-hits{font-size:11.5px;color:var(--jf-muted);min-width:46px;text-align:center;white-space:nowrap;}',
-
-    '.jf-check{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;',
-    '  border-radius:7px;font-size:12.5px;cursor:pointer;user-select:none;color:var(--jf-text);}',
-    '.jf-check:hover{background:var(--jf-accent-soft);}',
-    '.jf-check input{width:15px;height:15px;margin:0;accent-color:#3ab54a;cursor:pointer;}',
 
     /* ---------------- 正文 ---------------- */
     '.jf-body{flex:1 1 auto;overflow:auto;padding:14px 18px 80px;background:var(--jf-bg);}',
@@ -176,10 +167,6 @@
     '.jf-punct{color:var(--jf-punct);}',
     '.jf-summary{color:var(--jf-muted);font-style:italic;font-size:.92em;cursor:pointer;}',
     '.jf-summary:hover{color:var(--jf-accent);}',
-    '.jf-mark{background:var(--jf-mark);border-radius:2px;color:inherit;}',
-    '.jf-mark-cur{background:var(--jf-mark-cur);border-radius:2px;}',
-    '.jf-flash{animation:jf-flash 1.1s ease-out;}',
-    '@keyframes jf-flash{0%{background:var(--jf-mark-cur);}100%{background:transparent;}}',
 
     /* ---------------- 状态栏 ---------------- */
     '.jf-status{flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:6px 24px 6px 14px;',
@@ -240,17 +227,10 @@
   }
 
   var ICONS = {
-    collapseAll: ['M4 6h16', 'M4 12h9', 'M4 18h5'],
-    expandAll: ['M4 6h16', 'M4 12h12', 'M4 18h8', 'M17 15l3 3 3-3'],
     copy: ['M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1z',
       'M5 15V4a1 1 0 0 1 1-1h9'],
     download: ['M12 3.5v12', 'm7.5 11 4.5 4.5 4.5-4.5', 'M4.5 20.5h15'],
-    search: ['M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14z', 'm20 20-3.6-3.6'],
-    theme: ['M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z'],
-    restore: ['M3.5 12a8.5 8.5 0 1 0 2.7-6.2', 'M3 4v5h5'],
-    up: ['m6 15 6-6 6 6'],
-    down: ['m6 9 6 6 6-6'],
-    close: ['M6 6l12 12', 'M18 6 6 18']
+    theme: ['M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z']
   };
 
   /** 珊瑚红的圆角方框折叠标记：展开为「−」，折叠为「+」 */
@@ -306,13 +286,15 @@
       error: null,
       lenient: false,
       outMode: 'pretty',
-      hitMap: null,
-      hits: [],
-      cursor: -1,
       stats: { count: 0, depth: 0 }
     };
 
-    var body, toolbar, statusBar, toastEl, hitsLabel, searchInput, pathLabel, statsLabel;
+    var body, toolbar, statusBar, toastEl, pathLabel, statsLabel;
+
+    /** 当前渲染动作剩余可创建的 DOM 行数（见 MAX_CHUNK / RENDER_BUDGET 注释） */
+    var budget = 0;
+    /** 输出文本缓存：outputText() 的结果按「模式+缩进」缓存，避免每次统计都全树序列化 */
+    var outCache = { key: null, text: '' };
 
     rootEl.classList.add('jf-root');
     if (opts.overlay) rootEl.classList.add('jf-overlay');
@@ -328,6 +310,11 @@
     rootEl.appendChild(body);
     rootEl.appendChild(statusBar);
     rootEl.appendChild(toastEl);
+
+    var THEME_NAMES = { auto: '跟随系统', light: '浅色', dark: '深色' };
+    var THEME_ORDER = ['auto', 'light', 'dark'];
+    /** 工具栏控件引用，供 syncToolbar() 刷新文案与选中态 */
+    var tb = {};
 
     buildToolbar();
 
@@ -346,135 +333,84 @@
       b.type = 'button';
       b.title = title || label || '';
       if (icon) b.appendChild(svgIcon(ICONS[icon]));
-      if (label) b.appendChild(el('span', null, label));
+      if (label) {
+        var sp = el('span', null, label);
+        b.__jfLabel = sp;
+        b.appendChild(sp);
+      }
       b.addEventListener('click', handler);
       return b;
     }
 
-    function select(options, value, title, onChange) {
-      var sel = el('select', 'jf-select');
-      sel.title = title || '';
-      options.forEach(function (pair) {
-        var o = el('option', null, pair[1]);
-        o.value = pair[0];
-        sel.appendChild(o);
-      });
-      sel.value = value;
-      sel.addEventListener('change', function () { onChange(sel.value); });
-      return sel;
+    function setBtnLabel(btn, text) {
+      if (btn && btn.__jfLabel) btn.__jfLabel.textContent = text;
     }
 
     function buildToolbar() {
       toolbar.textContent = '';
 
-      toolbar.appendChild(tbtn(null, 'collapseAll', '折叠全部', function () {
-        setAllExpanded(false);
-      }));
-      toolbar.appendChild(tbtn(null, 'expandAll', '展开全部', function () {
-        setAllExpanded(true);
-      }));
-
-      var depthWrap = el('span', 'jf-field');
-      depthWrap.appendChild(el('span', null, '展开到'));
-      depthWrap.appendChild(select(
-        [['1', '1 层'], ['2', '2 层'], ['3', '3 层'], ['4', '4 层'], ['5', '5 层'], ['8', '8 层']],
-        String(opts.expandDepth), '打开时自动展开的层级',
-        function (v) {
-          opts.expandDepth = parseInt(v, 10);
-          expandToDepth(opts.expandDepth);
-          persist({ expandDepth: opts.expandDepth });
-        }
-      ));
-      toolbar.appendChild(depthWrap);
-
-      toolbar.appendChild(el('div', 'jf-sep'));
-
-      var searchWrap = el('span', 'jf-search');
-      searchWrap.appendChild(svgIcon(ICONS.search, { width: 2.2 })).classList.add('jf-search-icon');
-      searchInput = el('input');
-      searchInput.type = 'text';
-      searchInput.placeholder = '搜索键或值…';
-      searchInput.setAttribute('spellcheck', 'false');
-      var timer = null;
-      searchInput.addEventListener('input', function () {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(function () { performSearch(searchInput.value.trim()); }, 180);
-      });
-      searchInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          jump(e.shiftKey ? -1 : 1);
-        } else if (e.key === 'Escape') {
-          searchInput.value = '';
-          performSearch('');
-        }
-      });
-      searchWrap.appendChild(searchInput);
-      toolbar.appendChild(searchWrap);
-
-      hitsLabel = el('span', 'jf-hits');
-      toolbar.appendChild(hitsLabel);
-      toolbar.appendChild(tbtn(null, 'up', '上一个匹配（Shift+Enter）', function () { jump(-1); }));
-      toolbar.appendChild(tbtn(null, 'down', '下一个匹配（Enter）', function () { jump(1); }));
-
-      toolbar.appendChild(el('div', 'jf-sep'));
-
-      var escapeWrap = el('label', 'jf-check');
-      escapeWrap.title = '勾选：原样显示 \\n、\\uXXXX 等转义写法；取消：还原为真实字符';
-      var escapeBox = el('input');
-      escapeBox.type = 'checkbox';
-      escapeBox.checked = !!opts.keepEscape;
-      escapeBox.addEventListener('change', function () {
-        opts.keepEscape = escapeBox.checked;
+      tb.escape = tbtn('保留转义', null, '', function () {
+        opts.keepEscape = !opts.keepEscape;
         persist({ keepEscape: opts.keepEscape });
+        syncToolbar();
         render();
-        if (searchInput.value.trim()) performSearch(searchInput.value.trim());
-      });
-      escapeWrap.appendChild(escapeBox);
-      escapeWrap.appendChild(el('span', null, '保留转义'));
-      toolbar.appendChild(escapeWrap);
+      }, 'btn-solid');
+      toolbar.appendChild(tb.escape);
+
+      tb.theme = tbtn('主题', 'theme', '', function () {
+        var i = THEME_ORDER.indexOf(opts.theme);
+        opts.theme = THEME_ORDER[(i < 0 ? 0 : i + 1) % THEME_ORDER.length];
+        applyTheme();
+        persist({ theme: opts.theme });
+        syncToolbar();
+      }, 'btn-solid');
+      toolbar.appendChild(tb.theme);
+
+      tb.mode = tbtn('压缩', null, '', function () {
+        state.outMode = state.outMode === 'compact' ? 'pretty' : 'compact';
+        outCache.key = null;   // 输出模式变了，序列化缓存失效
+        syncToolbar();
+        render();              // 重渲染：压缩=单行扁平，美化=树形
+      }, 'btn-solid');
+      toolbar.appendChild(tb.mode);
 
       toolbar.appendChild(el('div', 'jf-spacer'));
 
-      toolbar.appendChild(select(
-        [['auto', '跟随系统'], ['light', '浅色'], ['dark', '深色']],
-        opts.theme, '主题',
-        function (v) {
-          opts.theme = v;
-          applyTheme();
-          persist({ theme: v });
-        }
-      ));
+      tb.copy = tbtn('复制', 'copy', '复制当前输出（美化 / 压缩）', function () {
+        var t = outputText();
+        doCopy(t, '已复制 ' + formatBytes(t.length));
+      }, 'btn-primary');
+      toolbar.appendChild(tb.copy);
 
-      toolbar.appendChild(select(
-        [['pretty', '美化'], ['compact', '压缩']],
-        state.outMode, '复制 / 下载时的输出格式',
-        function (v) { state.outMode = v; updateStats(); }
-      ));
+      tb.download = tbtn('下载', 'download', '下载为 .json 文件', function () {
+        downloadJson();
+      }, 'btn-outline');
+      toolbar.appendChild(tb.download);
 
-      toolbar.appendChild(select(
-        [['2', '2 空格'], ['4', '4 空格'], ['tab', 'Tab']],
-        String(opts.indent), '缩进宽度',
-        function (v) {
-          opts.indent = v === 'tab' ? 'tab' : parseInt(v, 10);
-          persist({ indent: opts.indent });
-          updateStats();
-        }
-      ));
+      syncToolbar();
+    }
 
-      if (typeof opts.onRestore === 'function') {
-        toolbar.appendChild(tbtn('还原原文', 'restore', '关闭格式化，显示网页原始内容',
-          function () { opts.onRestore(); }));
+    /** 刷新三个切换按钮的文案与高亮态（保留转义 / 主题 / 压缩） */
+    function syncToolbar() {
+      if (tb.escape) {
+        tb.escape.classList.toggle('jf-btn-on', !!opts.keepEscape);
+        tb.escape.title = opts.keepEscape
+          ? '保留转义：已开启（点击关闭，\\n、\\uXXXX 还原为真实字符）'
+          : '保留转义：已关闭（点击开启，原样显示 \\n、\\uXXXX 等写法）';
       }
-      if (typeof opts.onClose === 'function') {
-        toolbar.appendChild(tbtn(null, 'close', '关闭', function () { opts.onClose(); }));
+      if (tb.theme) {
+        setBtnLabel(tb.theme, THEME_NAMES[opts.theme] || '主题');
+        tb.theme.classList.toggle('jf-btn-on', opts.theme !== 'auto');
+        tb.theme.title = '主题：' + (THEME_NAMES[opts.theme] || '跟随系统') + '（点击切换）';
       }
-
-      toolbar.appendChild(tbtn('复制', 'copy', '复制格式化后的 JSON',
-        function () { doCopy(outputText(), '已复制 ' + formatBytes(outputText().length)); },
-        'btn-primary'));
-      toolbar.appendChild(tbtn('下载', 'download', '下载为 .json 文件',
-        function () { downloadJson(); }, 'btn-outline'));
+      if (tb.mode) {
+        var compact = state.outMode === 'compact';
+        setBtnLabel(tb.mode, compact ? '压缩' : '美化');
+        tb.mode.classList.toggle('jf-btn-on', compact);
+        tb.mode.title = compact
+          ? '输出：压缩（单行）——点击切换为美化'
+          : '输出：美化（缩进展开）——点击切换为压缩';
+      }
     }
 
     /* ---------------- 主题与字号 ---------------- */
@@ -484,6 +420,8 @@
       var theme = opts.theme;
       if (theme === 'auto') theme = mql && mql.matches ? 'dark' : 'light';
       rootEl.setAttribute('data-theme', theme);
+      // 通知宿主（如独立编辑页）同步全局主题；接管网页时宿主不接这个回调即可
+      if (typeof opts.onThemeChange === 'function') opts.onThemeChange(theme, opts.theme);
     }
 
     if (mql && mql.addEventListener) {
@@ -570,7 +508,7 @@
 
     function makeKeySpan(keyNode, path) {
       var span = el('span', 'jf-key');
-      highlightInto(span, keyText(keyNode), state.hitMap ? state.hitMap.term : '');
+      span.textContent = keyText(keyNode);
       var fullPath = path || keyNode.value;
       span.title = '点击复制路径：' + fullPath;
       span.addEventListener('click', function (e) {
@@ -580,8 +518,81 @@
       return span;
     }
 
+    /**
+     * 压缩显示：把整棵树渲染成单行扁平文本（键 + 值 + 分隔符连续排列），
+     * 不折叠、不换行、无缩进。叶子节点（值）保留语法高亮与点击复制。
+     * 这是「压缩」按钮的可见效果——点下去，屏幕上的 JSON 真的收成一行。
+     */
+    function renderCompactNode(parentEl, node, keyNode, isLast, depth) {
+      var row = makeRow(node, depth);
+      var content = el('span', 'jf-content');
+      if (keyNode) {
+        content.appendChild(makeKeySpan(keyNode, keyNode.value));
+        content.appendChild(el('span', 'jf-punct', ':'));
+      }
+      if (node.type === 'object' || node.type === 'array') {
+        var isObj = node.type === 'object';
+        content.appendChild(el('span', 'jf-punct', isObj ? '{' : '['));
+        var kids = isObj ? orderedEntries(node) : node.items;
+        for (var i = 0; i < kids.length; i++) {
+          if (i > 0) content.appendChild(el('span', 'jf-punct', ','));
+          if (isObj) {
+            renderCompactChild(content, kids[i].value, kids[i].keyNode, i === kids.length - 1, depth + 1);
+          } else {
+            renderCompactChild(content, kids[i], null, i === kids.length - 1, depth + 1);
+          }
+        }
+        content.appendChild(el('span', 'jf-punct', isObj ? '}' : ']'));
+      } else {
+        var v = el('span', nodeValueClass(node));
+        v.textContent = valueText(node);
+        v.title = '点击复制值';
+        v.style.cursor = 'pointer';
+        v.addEventListener('click', function () { doCopy(valueText(node), '已复制值'); });
+        content.appendChild(v);
+      }
+      if (!isLast) content.appendChild(el('span', 'jf-punct', ','));
+      row.appendChild(content);
+      parentEl.appendChild(row);
+    }
+
+    // 压缩模式下，子节点与父节点拼在同一行内，不单独建行
+    function renderCompactChild(parentContentEl, node, keyNode, isLast, depth) {
+      if (keyNode) {
+        parentContentEl.appendChild(makeKeySpan(keyNode, null));
+        parentContentEl.appendChild(el('span', 'jf-punct', ':'));
+      }
+      if (node.type === 'object' || node.type === 'array') {
+        var isObj = node.type === 'object';
+        parentContentEl.appendChild(el('span', 'jf-punct', isObj ? '{' : '['));
+        var kids = isObj ? orderedEntries(node) : node.items;
+        for (var i = 0; i < kids.length; i++) {
+          if (i > 0) parentContentEl.appendChild(el('span', 'jf-punct', ','));
+          if (isObj) {
+            renderCompactChild(parentContentEl, kids[i].value, kids[i].keyNode, i === kids.length - 1, depth + 1);
+          } else {
+            renderCompactChild(parentContentEl, kids[i], null, i === kids.length - 1, depth + 1);
+          }
+        }
+        parentContentEl.appendChild(el('span', 'jf-punct', isObj ? '}' : ']'));
+      } else {
+        var v = el('span', nodeValueClass(node));
+        v.textContent = valueText(node);
+        v.title = '点击复制值';
+        v.style.cursor = 'pointer';
+        v.addEventListener('click', function () { doCopy(valueText(node), '已复制值'); });
+        parentContentEl.appendChild(v);
+      }
+    }
+
     function renderNode(parentEl, node, keyNode, isLast, path, depth) {
       depth = depth || 0;
+      // 压缩模式：整棵树渲染成单行扁平文本（不折叠、不换行、无缩进引导线），
+      // 与「复制/下载」时输出的 compact 字符串保持同一份显示语义。
+      if (state.outMode === 'compact') {
+        renderCompactNode(parentEl, node, keyNode, isLast, depth);
+        return;
+      }
       var isContainer = node.type === 'object' || node.type === 'array';
       var childCount = isContainer
         ? (node.type === 'object' ? node.entries.length : node.items.length)
@@ -623,7 +634,10 @@
           setToggleIcon(toggle, node.expanded);
           sum.style.display = node.expanded ? 'none' : '';
           kids.classList.toggle('jf-children-collapsed', !node.expanded);
-          if (node.expanded) fillChildren(kids, node, path, depth);
+          if (node.expanded) {
+            budget = RENDER_BUDGET;
+            fillChildren(kids, node, path, depth);
+          }
           renumber();
           updateStats();
         }
@@ -643,7 +657,7 @@
         rowContent.appendChild(el('span', 'jf-punct', node.type === 'object' ? '{}' : '[]'));
       } else {
         var v = el('span', nodeValueClass(node));
-        highlightInto(v, valueText(node), state.hitMap ? state.hitMap.term : '');
+        v.textContent = valueText(node);
         v.title = '点击复制值';
         v.style.cursor = 'pointer';
         v.addEventListener('click', function () { doCopy(valueText(node), '已复制值'); });
@@ -656,49 +670,69 @@
 
     function fillChildren(kidsEl, node, path, depth) {
       if (kidsEl.__jfFilled) return;
-      var frag = body.ownerDocument.createDocumentFragment();
+      fillMore(kidsEl, node, path, depth, MAX_CHUNK);
+      kidsEl.__jfFilled = true;
+    }
+
+    /**
+     * 从 kidsEl.__jfCursor 起继续渲染 node 的子节点，最多 count 个，
+     * 且不超过当前渲染预算 budget。仍未渲染完时在末尾挂一条
+     * 「还有 N 项，点击加载更多」，点击后重置预算继续分批加载。
+     */
+    function fillMore(kidsEl, node, path, depth, count) {
+      var isObj = node.type === 'object';
+      var total = isObj ? node.entries.length : node.items.length;
+      var start = kidsEl.__jfCursor || 0;
+      if (start >= total) return;
+
+      var limit = Math.min(count, Math.max(budget, 1));
+      var end = Math.min(total, start + limit);
       var child = depth + 1;
-      if (node.type === 'object') {
+      var frag = body.ownerDocument.createDocumentFragment();
+      var i;
+
+      if (isObj) {
         var entries = orderedEntries(node);
-        for (var i = 0; i < entries.length; i++) {
+        for (i = start; i < end; i++) {
           renderNode(
-            frag, entries[i].value, entries[i].keyNode, i === entries.length - 1,
+            frag, entries[i].value, entries[i].keyNode, i === total - 1,
             parser.joinKey(path, entries[i].keyNode.value), child
           );
         }
       } else {
-        for (var j = 0; j < node.items.length; j++) {
-          renderNode(frag, node.items[j], null, j === node.items.length - 1,
-            path + '[' + j + ']', child);
+        for (i = start; i < end; i++) {
+          renderNode(frag, node.items[i], null, i === total - 1,
+            path + '[' + i + ']', child);
         }
       }
-      kidsEl.textContent = '';
-      kidsEl.appendChild(frag);
-      kidsEl.__jfFilled = true;
-    }
 
-    function highlightInto(span, text, term) {
-      if (!term) {
-        span.textContent = text;
-        return;
+      budget -= (end - start);
+
+      // 先移除上一条「加载更多」，再插入新内容，保证哨兵始终在末尾
+      if (kidsEl.__jfMoreRow && kidsEl.__jfMoreRow.parentNode) {
+        kidsEl.removeChild(kidsEl.__jfMoreRow);
       }
-      var lower = text.toLowerCase();
-      var needle = term.toLowerCase();
-      var idx = 0;
-      var n = 0;
-      span.textContent = '';
-      while (true) {
-        var at = lower.indexOf(needle, idx);
-        if (at === -1) break;
-        if (at > idx) span.appendChild(span.ownerDocument.createTextNode(text.slice(idx, at)));
-        var mk = el('span', 'jf-mark');
-        mk.textContent = text.slice(at, at + needle.length);
-        span.appendChild(mk);
-        idx = at + needle.length;
-        n++;
+      kidsEl.appendChild(frag);
+      kidsEl.__jfCursor = end;
+      kidsEl.__jfMoreRow = null;
+
+      if (end < total) {
+        var moreRow = el('div', 'jf-row');
+        moreRow.style.setProperty('--jf-depth', String(child));
+        var moreContent = el('span', 'jf-content');
+        var more = el('span', 'jf-summary',
+          '… 还有 ' + (total - end).toLocaleString() + ' 项，点击加载更多');
+        more.title = '点击继续加载';
+        more.addEventListener('click', function () {
+          budget = RENDER_BUDGET;
+          fillMore(kidsEl, node, path, depth, MAX_CHUNK * 2);
+          renumber();
+        });
+        moreContent.appendChild(more);
+        moreRow.appendChild(moreContent);
+        kidsEl.appendChild(moreRow);
+        kidsEl.__jfMoreRow = moreRow;
       }
-      if (idx < text.length) span.appendChild(span.ownerDocument.createTextNode(text.slice(idx)));
-      if (n === 0) span.textContent = text;
     }
 
     function renumber() {
@@ -765,6 +799,7 @@
         updateStats();
         return;
       }
+      budget = RENDER_BUDGET;
       var frag = body.ownerDocument.createDocumentFragment();
       renderNode(frag, state.root, null, true, '$', 0);
       body.appendChild(frag);
@@ -781,94 +816,8 @@
       render();
     }
 
-    function expandToDepth(depth) {
-      if (!state.root) return;
-      parser.walk(state.root, function (node) {
-        if (node.type === 'object' || node.type === 'array') node.expanded = node.depth < depth;
-      });
-      render();
-    }
 
-    function expandAncestors(node) {
-      var cur = node.parent;
-      while (cur) {
-        cur.expanded = true;
-        cur = cur.parent;
-      }
-    }
-
-    /* ---------------- 搜索 ---------------- */
-    function performSearch(term) {
-      state.hits = [];
-      state.cursor = -1;
-      state.hitMap = term ? { term: term } : null;
-
-      if (!term || !state.root) {
-        hitsLabel.textContent = '';
-        render();
-        return;
-      }
-
-      var needle = term.toLowerCase();
-      var pending = [];
-      var isLeaf = function (node) {
-        return node.type !== 'object' && node.type !== 'array';
-      };
-      parser.walk(state.root, function (node) {
-        var matched = false;
-        // 键名命中
-        if (node.keyNode) {
-          if (keyText(node.keyNode).toLowerCase().indexOf(needle) !== -1 ||
-              node.keyNode.value.toLowerCase().indexOf(needle) !== -1) {
-            matched = true;
-          }
-        }
-        // 值命中：容器不按原文匹配，否则根节点会因整段文本而永远命中
-        if (!matched && isLeaf(node)) {
-          if (valueText(node).toLowerCase().indexOf(needle) !== -1) matched = true;
-          else if (node.type === 'string' && node.value.toLowerCase().indexOf(needle) !== -1) matched = true;
-        }
-        if (matched) pending.push(node);
-      });
-
-      state.hits = pending;
-      if (pending.length && pending.length <= 300) {
-        for (var i = 0; i < pending.length; i++) expandAncestors(pending[i]);
-      }
-      render();
-
-      if (!pending.length) {
-        hitsLabel.textContent = '无匹配';
-        return;
-      }
-      jumpTo(0, true);
-    }
-
-    function jumpTo(index, silent) {
-      if (!state.hits.length) return;
-      var n = state.hits.length;
-      state.cursor = ((index % n) + n) % n;
-      var node = state.hits[state.cursor];
-      var row = body.querySelector('[data-jf-node="' + node.id + '"]');
-      hitsLabel.textContent = (state.cursor + 1) + '/' + n;
-      if (row) {
-        var prev = body.querySelector('.jf-flash');
-        if (prev) prev.classList.remove('jf-flash');
-        row.classList.add('jf-flash');
-        try {
-          row.scrollIntoView({ block: 'center', behavior: silent ? 'auto' : 'smooth' });
-        } catch (e) {
-          row.scrollIntoView();
-        }
-      }
-      setPath(node.path);
-    }
-
-    function jump(delta) {
-      if (!state.hits.length) return;
-      jumpTo(state.cursor + delta, false);
-    }
-
+    /* ---------------- 路径 ---------------- */
     function setPath(p) {
       state.currentPath = p || '';
       pathLabel.textContent = '';
@@ -920,10 +869,22 @@
       return node.raw;
     }
 
+    /**
+     * 输出文本。结果按「模式+缩进+树版本」缓存：
+     * 旧版 updateStats() 每次渲染/折叠都调用这里，把整棵树序列化成
+     * 10MB 级字符串只为显示一个"输出多大"，是大 JSON 卡死的元凶之一。
+     */
+    var treeVersion = 0;
     function outputText() {
       if (!state.root) return state.text || '';
-      if (state.outMode === 'compact') return compact(state.root);
-      return pretty(state.root, NS.indentUnit(opts.indent), 0);
+      var key = state.outMode + ':' + opts.indent + ':' + treeVersion;
+      if (outCache.key === key) return outCache.text;
+      var t;
+      if (state.outMode === 'compact') t = compact(state.root);
+      else t = pretty(state.root, NS.indentUnit(opts.indent), 0);
+      outCache.key = key;
+      outCache.text = t;
+      return t;
     }
 
     function doCopy(text, message) {
@@ -995,22 +956,23 @@
         statsLabel.textContent = '';
         return;
       }
+      // 输出体积需要全树序列化（pretty/compact），对十几 MB 的 JSON 是数百毫秒的
+      // 同步开销。这里绝不主动触发序列化——只在缓存已命中（用户点过复制/导出）
+      // 时才顺带展示，把序列化完全移出「粘贴 → 首屏渲染」的关键路径。
+      var key = state.outMode + ':' + opts.indent + ':' + treeVersion;
+      var outPart = (outCache.key === key && outCache.text)
+        ? ' · 输出 ' + formatBytes(outCache.text.length)
+        : '';
       statsLabel.textContent =
         state.stats.count + ' 个节点 · 深度 ' + state.stats.depth +
-        ' · 源码 ' + formatBytes(state.text.length) +
-        ' · 输出 ' + formatBytes(outputText().length);
+        ' · 源码 ' + formatBytes(state.text.length) + outPart;
     }
 
     function afterParse() {
       state.stats = parser.stats(state.root);
-      state.hitMap = null;
-      state.hits = [];
-      state.cursor = -1;
-      if (searchInput) {
-        searchInput.value = '';
-      }
-      if (hitsLabel) hitsLabel.textContent = '';
-      expandToDepth(opts.expandDepth);
+      // 默认全展开：渲染本身是分片的（RENDER_BUDGET / MAX_CHUNK），
+      // 超大 JSON 也只会先渲染可视范围内的一批，其余走「加载更多」
+      setAllExpanded(true);
       setPath('');
     }
 
@@ -1021,6 +983,8 @@
       state.error = null;
       state.root = null;
       state.lenient = false;
+      outCache.key = null;
+      treeVersion++;
       try {
         var res = parser.parse(state.text, { lenient: !!options.lenient });
         state.root = res.root;
@@ -1038,11 +1002,13 @@
 
     function updateOptions(patch) {
       Object.assign(opts, patch || {});
+      // sortKeys 等影响输出内容的选项变化时，输出缓存必须失效
+      outCache.key = null;
       applyTheme();
       applyFont();
+      syncToolbar();
       if (state.root) {
         render();
-        if (searchInput && searchInput.value.trim()) performSearch(searchInput.value.trim());
       }
     }
 

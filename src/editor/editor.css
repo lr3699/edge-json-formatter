@@ -45,8 +45,10 @@
   --split: 36%;
 }
 
+/* 深色 token 提取为可复用块：既跟随系统，也可由「主题」按钮通过
+   html[data-theme="dark"] 强制启用（全局深色，不只是右侧查看器）。 */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --page: #0e1015;
     --panel: #15181e;
     --panel-2: #191d24;
@@ -72,6 +74,33 @@
 
     --blob-opacity: .34;
   }
+}
+
+html[data-theme="dark"] {
+  --page: #0e1015;
+  --panel: #15181e;
+  --panel-2: #191d24;
+  --border: #262b34;
+  --border-soft: #1f242c;
+
+  --text: #e7eaf0;
+  --text-2: #b6bdc9;
+  --muted: #828b99;
+
+  --brand: #3fc06a;
+  --brand-2: #2fbfa0;
+  --accent: #4db8f0;
+  --ok: #4cc97a;
+  --err: #ff8080;
+  --violet: #a78bfa;
+
+  --ring: rgba(77, 184, 240, .3);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow-md: 0 4px 18px -4px rgba(0, 0, 0, .55), 0 1px 3px rgba(0, 0, 0, .4);
+  --shadow-lg: 0 24px 56px -22px rgba(0, 0, 0, .75);
+
+  --blob-opacity: .34;
 }
 
 html, body { height: 100%; margin: 0; }
@@ -464,6 +493,53 @@ kbd {
   opacity: .8;
   line-height: 1.9;
 }
+
+/* 大输入：虚拟滚动只读原文视图。
+   超长文本不塞进原生 textarea——浏览器对超长文本节点做布局/绘制会阻塞主线程
+   数秒，这是「Ctrl+V 卡顿很久」的根因。这里把原文按行拆开，只渲染可视区域
+   （真实虚拟滚动），20MB 内原文完整可见、逐行可查、滚动流畅。 */
+.raw-view {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  background: var(--panel);
+  color: var(--text);
+  font: 500 14px/24px var(--mono);
+  tab-size: 2;
+  contain: layout paint;
+}
+.raw-sizer {
+  width: 1px;
+  height: 1px;
+}
+.raw-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  will-change: transform;
+}
+.raw-line {
+  display: flex;
+  align-items: baseline;
+  height: 24px;
+  padding: 0 16px;
+  white-space: pre;
+}
+.raw-ln {
+  flex: 0 0 auto;
+  min-width: 4em;
+  margin-right: 14px;
+  text-align: right;
+  color: var(--muted);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+.raw-tx {
+  flex: 1 1 auto;
+  white-space: pre;
+}
+.raw-view[hidden] { display: none; }
 
 .panel-input.is-dragover {
   border-color: var(--accent);

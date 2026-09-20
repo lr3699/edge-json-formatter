@@ -15,7 +15,6 @@
     { id: 'maxAutoSize', key: 'maxAutoSize', type: 'int' },
     { id: 'theme', key: 'theme', type: 'str' },
     { id: 'indent', key: 'indent', type: 'indent' },
-    { id: 'expandDepth', key: 'expandDepth', type: 'int' },
     { id: 'fontSize', key: 'fontSize', type: 'int' },
     { id: 'monoFont', key: 'monoFont', type: 'bool' },
     { id: 'lineNumbers', key: 'lineNumbers', type: 'bool' },

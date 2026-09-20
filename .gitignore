@@ -10,3 +10,6 @@ __pycache__/
 # 临时与日志
 .tmp_*
 *.log
+
+# 调试用 Edge 浏览器临时配置（browser-automation-cdp 启动时生成）
+.edge-profile/

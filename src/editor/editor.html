@@ -75,6 +75,10 @@
       <div class="editor-wrap">
         <textarea id="input" spellcheck="false" autocomplete="off" autocapitalize="off"
                   placeholder="把 JSON 粘贴到这里…&#10;&#10;· Ctrl+V / ⌘V 直接粘贴&#10;· 或把 .json / .txt 文件拖进来&#10;· 支持带注释、单引号、尾随逗号的宽松写法"></textarea>
+        <div id="rawView" class="raw-view" hidden>
+          <div id="rawSizer" class="raw-sizer"></div>
+          <div id="rawContent" class="raw-content"></div>
+        </div>
       </div>
       <footer class="panel-foot">
         <span id="stats" class="muted">0 字符</span>

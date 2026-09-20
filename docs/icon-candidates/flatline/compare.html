@@ -1,0 +1,30 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<title>图标比稿 · 扁平描边</title>
+<style>
+:root{color-scheme:light}
+body{margin:0;padding:28px 32px 60px;background:#F7F8FA;color:#111827;
+ font:14px/1.6 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+h1{margin:0 0 6px;font-size:22px;letter-spacing:-.01em}
+.sub{color:#6B7280;margin:0 0 22px;max-width:860px}
+.row{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;align-items:start}
+.cell{background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:14px;
+ box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.cell.ref{border-color:#FCA5A5;background:#FFFBFB}
+.light{background:#FBFBFB;border-radius:12px 12px 0 0;padding:10px;text-align:center;line-height:0}
+.dark{background:#2E2E2E;border-radius:0 0 12px 12px;padding:10px;text-align:center;line-height:0}
+.accent{background:#FBFBFB;border-radius:12px;margin-top:8px;padding:10px;text-align:center;line-height:0}
+.light img,.dark img,.accent img{width:128px;height:128px}
+.cell.ref .light img{width:150px;height:150px;border-radius:6px}
+.sm{margin-top:10px;display:flex;align-items:flex-end;gap:8px;justify-content:center}
+.sm img{display:block}
+h3{margin:8px 0 2px;font-size:13.5px;font-weight:600}
+p{margin:0;font-size:12px;color:#6B7280;line-height:1.5}
+code{background:#F3F4F6;padding:1px 4px;border-radius:4px;font-size:11.5px}
+</style></head><body>
+<h1>图标比稿 · 扁平描边（黑白）</h1>
+<p class="sub">按你说的改成<b>黑白色</b>：近黑方圆形底 <code>#1F1F1F</code> + 白色粗圆头描边，
+全扁平 —— 没有渐变、没有投影、没有厚度。四套共用参考图的花括号外框，<b>只换「里面」</b>，
+并且都加了能表达 JSON 的元素（冒号、键值对、缩进行、方括号）；
+黑白里靠「空心 = 键 / 实心 = 值」区分，第三行是保留一点琥珀橙的版本（跟参考图那个橙点对应）。</p>
+<div class="row"><div class="cell"><div class="light"><img src="arr@128.png" alt=""></div><div class="dark"><img src="arr@128.png" alt=""></div><div class="accent"><img src="arr-accent@128.png" alt=""></div><div class="sm"><img src="arr@32.png" width="32" height="32" alt=""><img src="arr@16.png" width="16" height="16" alt=""></div><h3>嵌套数组</h3><p>花括号里再套一对方括号，中间一枚实心点：对象里套数组的层级。</p></div><div class="cell"><div class="light"><img src="kv@128.png" alt=""></div><div class="dark"><img src="kv@128.png" alt=""></div><div class="accent"><img src="kv-accent@128.png" alt=""></div><div class="sm"><img src="kv@32.png" width="32" height="32" alt=""><img src="kv@16.png" width="16" height="16" alt=""></div><h3>键值对</h3><p>一个「键 : 值」：空心胶囊是键、实心胶囊是值。黑白下也分得清，最直白。</p></div><div class="cell"><div class="light"><img src="rows@128.png" alt=""></div><div class="dark"><img src="rows@128.png" alt=""></div><div class="accent"><img src="rows-accent@128.png" alt=""></div><div class="sm"><img src="rows@32.png" width="32" height="32" alt=""><img src="rows@16.png" width="16" height="16" alt=""></div><h3>多行键值</h3><p>两行缩进的「键 : 值」，就是格式化之后的 JSON。元素最多、信息量最大。</p></div><div class="cell"><div class="light"><img src="str@128.png" alt=""></div><div class="dark"><img src="str@128.png" alt=""></div><div class="accent"><img src="str-accent@128.png" alt=""></div><div class="sm"><img src="str@32.png" width="32" height="32" alt=""><img src="str@16.png" width="16" height="16" alt=""></div><h3>字符串</h3><p>一对引号夹一个实心胶囊，就是 value。引号是 JSON 里最抓眼的元素。</p></div><div class="cell"><div class="light"><img src="tree@128.png" alt=""></div><div class="dark"><img src="tree@128.png" alt=""></div><div class="accent"><img src="tree-accent@128.png" alt=""></div><div class="sm"><img src="tree@32.png" width="32" height="32" alt=""><img src="tree@16.png" width="16" height="16" alt=""></div><h3>节点树</h3><p>参考图同款语义：实心根节点 + 分支 + 空心子节点。不看 JSON 也认得出是数据。</p></div><div class="cell ref"><div class="light"><img src="../ref-zoom.png" alt=""></div><h3>参考图</h3><p>用户给的截图（放大后的原始像素）。四套都保留它的外框与配色，只换里面的图形语言。</p></div></div>
+</body></html>

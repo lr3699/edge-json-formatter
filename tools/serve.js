@@ -68,7 +68,7 @@ const server = http.createServer((req, res) => {
     ).join('');
     send(res, 200, MIME['.html'],
       '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">' +
-      '<title>JSON 格式化查看器 · 本地预览</title><style>' +
+      '<title>JSON Duo · 本地预览</title><style>' +
       'body{margin:0;padding:32px 24px;font:14px/1.7 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;' +
       'background:#f7f8fa;color:#333}.w{max-width:760px;margin:0 auto}h1{font-size:19px;margin:0 0 6px}' +
       'p{color:#9aa0a6;margin:0 0 20px;font-size:13px}.card{background:#fff;border:1px solid #e8e8e8;' +
@@ -76,7 +76,7 @@ const server = http.createServer((req, res) => {
       'border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;gap:16px;align-items:baseline}' +
       'li:first-child{border-top:0}a{color:#3ab54a;text-decoration:none;font-weight:600}a:hover{text-decoration:underline}' +
       'code{color:#92278f;background:rgba(146,39,143,.08);padding:2px 7px;border-radius:5px;font-size:12px}' +
-      '</style></head><body><div class="w"><h1>JSON 格式化查看器 · 本地预览</h1>' +
+      '</style></head><body><div class="w"><h1>JSON Duo · 本地预览</h1>' +
       '<p>以下页面直接复用扩展里的查看器代码，无需安装扩展。</p>' +
       '<div class="card"><ul>' + items + '</ul></div></div></body></html>');
     return;

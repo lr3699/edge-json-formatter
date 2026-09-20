@@ -169,8 +169,9 @@
     document.addEventListener('keydown', onKeyDown, true);
   }
 
+  // 工具栏只保留功能按钮，关闭入口统一收敛到 Esc（浮层与整页两种模式都可用）
   function onKeyDown(e) {
-    if (e.key === 'Escape' && hostEl && hostEl.dataset.jfOverlay === '1') {
+    if (e.key === 'Escape' && hostEl) {
       close();
     }
   }

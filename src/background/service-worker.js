@@ -89,3 +89,13 @@ chrome.commands.onCommand.addListener((command, tab) => {
   if (tabId === undefined) return;
   sendToTab(tabId, { type: 'JF_TOGGLE' });
 });
+
+/**
+ * 点击工具栏图标直接打开「粘贴 JSON 格式化」编辑页，不再弹二级 popup。
+ * 注意：只有当 action 没有 default_popup 时，onClicked 才会触发；
+ * manifest 里已移除 default_popup。格式化当前页面 / 还原原文等能力
+ * 仍可通过右键菜单或快捷键 Alt+Shift+J 使用。
+ */
+chrome.action.onClicked.addListener(() => {
+  NS.openEditor();
+});

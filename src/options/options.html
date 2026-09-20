@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <title>JSON 格式化查看器 · 设置</title>
+  <title>JSON Duo · 设置</title>
   <link rel="stylesheet" href="options.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
           <path d="M9 4H7.5A2.5 2.5 0 0 0 5 6.5v3A2.5 2.5 0 0 1 2.5 12 2.5 2.5 0 0 1 5 14.5v3A2.5 2.5 0 0 0 7.5 20H9"/>
           <path d="M15 4h1.5A2.5 2.5 0 0 1 19 6.5v3A2.5 2.5 0 0 0 21.5 12 2.5 2.5 0 0 0 19 14.5v3A2.5 2.5 0 0 1 16.5 20H15"/>
         </svg>
-        <h1>JSON 格式化查看器 · 设置</h1>
+        <h1>JSON Duo · 设置</h1>
       </div>
       <span class="version" id="version"></span>
     </header>
@@ -59,7 +59,8 @@
         <select id="maxAutoSize">
           <option value="1048576">1 MB</option>
           <option value="4194304">4 MB</option>
-          <option value="12582912">12 MB</option>
+          <option value="10485760">10 MB</option>
+          <option value="20971520">20 MB</option>
           <option value="52428800">50 MB</option>
         </select>
       </label>
@@ -87,20 +88,6 @@
           <option value="2">2 空格</option>
           <option value="4">4 空格</option>
           <option value="tab">Tab</option>
-        </select>
-      </label>
-      <label class="row">
-        <span class="label">
-          <b>默认展开层级</b>
-          <em>打开时自动展开到第几层</em>
-        </span>
-        <select id="expandDepth">
-          <option value="1">1 层</option>
-          <option value="2">2 层</option>
-          <option value="3">3 层</option>
-          <option value="4">4 层</option>
-          <option value="5">5 层</option>
-          <option value="8">8 层</option>
         </select>
       </label>
       <label class="row">

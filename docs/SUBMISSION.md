@@ -3,6 +3,61 @@
 > 依据 Microsoft 官方文档《Publish a Microsoft Edge extension》整理（2026-09 核对）。
 > 参考：https://learn.microsoft.com/microsoft-edge/extensions/publish/publish-extension
 
+## v1.1.3 更新：更名「JSON Duo」+ 中文化（待提交）
+
+**改名 + 中文描述**，这是下一版（1.1.3）要走的更新流程。与以往不同，本次改了
+`manifest` 的名称与 `_locales`，所以 Partner Center 的语言识别会从 English 变成中文。
+
+| 项 | 值 |
+| --- | --- |
+| 新名称 | **JSON Duo**（manifest.name = `__MSG_extName__`，zh_CN 与 en 均为 "JSON Duo"） |
+| 语言 | `default_locale: zh_CN` + `_locales/{zh_CN,en}` → 商店主语言识别为中文（简体） |
+| 描述 | 中文（见 `docs/store-listing.md` 顶部「中文主文案」） |
+| 上传包 | `dist/json-duo-1.1.3.zip` |
+
+### 改名上架的注意点
+
+1. **改 `name` 属于「产品更名」**，Partner Center 可能要求重新审核，且新名字要在
+   商店里唯一（`JSON Duo` 若已被占用会被拒，届时换 `JSON Duo - JSON 格式化` 之类）。
+2. **语言识别变了**：因为 manifest 现在带 `_locales` 且 `default_locale: zh_CN`，
+   Store listings 会识别出「中文（简体）」为主语言、English 为次语言。
+   **中文文案要填在中文语言行里**，英文文案填在 English 行（文案都在 store-listing.md）。
+3. **描述走中文后**，认证说明（Certification notes）也建议用中文（store-listing.md 已备好中文版）。
+4. 权限无变化（storage / contextMenus / activeTab / `<all_urls>` 与 1.0.0 一致），
+   Privacy 页无需重填。
+
+### 上架操作（在 1.1.0 审核通过后）
+
+Overview → **Update** → Packages 上传 `dist/json-duo-1.1.3.zip` →
+Store listings 用中文填 Name（只读，取自 manifest）+ Description + 截图 →
+Submit。截图已重拍为 v1.1.3 界面（`docs/shots/` + `docs/editor-*.png`）。
+
+---
+
+## 1.1.0 已提交（2026-09-20 16:2x，状态：In review）
+
+1.0.0 于当日约 13:45 通过审核并**上线**（首次审核只花了约 2.5 小时，远快于官方宣称的 7 个工作日）。
+随后提交 1.1.0（含**全屏沉浸模式**与**根除窗口闪动**两项修复）。
+
+| 项 | 值 |
+| --- | --- |
+| 提交 ID | `1152921505701935289` |
+| 版本 | 1.1.0 |
+| 状态 | **In review** |
+| 上一版（在售） | 1.0.0，提交 ID `1152921505701935214`，状态 `InExtensionStore` |
+| 认证说明 | 1847 / 2000 字符（本次更新，补了编辑页与全屏的测试步骤） |
+| 商店页 | <https://microsoftedge.microsoft.com/addons/detail/lckjaaoekeleokmdnjjfagoohghjflcn> |
+
+认证说明文案取自 `tools/fill-certification-1.1.0.json`（可直接复用于下一版）。
+
+> **提交 ≠ 上线。** 审核期间商店对外仍是 1.0.0；通过后新版自动替换，
+> 无需再操作。想确认线上到底是哪一版，跑
+> `scripts/check-store-publish.py <CRX ID>` 看 `线上版本` 字段。
+
+> 踩坑备忘：拟「撤回旧提交换成新版」时，`Cancel/isAllowed` 的
+> `workflowStatus` 在**刚提交**和**审核推进后**都是 `Started`，区分不了能不能取消 ——
+> 只能看 `isCancelAllowed` 本身。刚提交时通常为 `true`（可撤回），审核推进后变 `false`。
+
 ## 提交结果（2026-09-20 已完成）
 
 **已提交，状态：In review（审核中）。**
@@ -11,7 +66,7 @@
 | --- | --- |
 | 产品 ID | `b5797b76-ba71-40f0-abd2-b1248f932cf1` |
 | Store ID | `0RDCK9ZTJXV2` |
-| CRX ID | `lckjaaokeleokmdnjfagooohghjflcn` |
+| CRX ID | `lckjaaoekeleokmdnjjfagoohghjflcn` |
 | 版本 | 1.0.0 |
 | 分类 | Developer Tools |
 | 可见性 | Public（全部市场） |
@@ -73,7 +128,7 @@ Privacy 页保持原样即可，只需在 `Packages` 换包、必要时在 `Stor
 | 商店图标 | `icons/store-icon-300.png` | 300×300 PNG |
 | 截图（≥1 张） | `docs/shots/shot-light.png` | 1280×800，符合要求 |
 | 截图 2 | `docs/shots/shot-dark.png` | 深色主题 |
-| 截图 3 | `docs/shots/shot-search.png` | 搜索定位功能 |
+| 截图 3 | `docs/shots/shot-toolbar.png` | 工具栏五个按钮与开关高亮态 |
 | 商店文案 | `docs/store-listing.md` | 直接复制粘贴 |
 | 隐私政策 | `PRIVACY.md` / `site/privacy.html` | **已上线**，见下方 URL |
 
@@ -188,8 +243,9 @@ Partner Center 首页 → **Workspaces** 区域点 **Edge** 卡片 → 概览页
 - Extension name：取自 manifest，只读
 - **Description**：粘贴详细描述（≤ 10000 字符）——本次用的是英文版
 - **Extension logo**：上传 `icons/store-icon-300.png`（300×300，必需）
-- **Screenshots**：本次上传 6 张 1280×800（`docs/shots/` 下的
-  `shot-light` / `shot-dark` / `shot-search` / `shot-lines` / `shot-compact` / `e2e-packaged`）
+- **Screenshots**：上传 6 张 1280×800（`docs/shots/` 下的
+  `shot-light` / `shot-dark` / `shot-toolbar` / `shot-compact` /
+  `../editor-done` / `../editor-dark`；重拍用 `python tools/shoot.py`）
 - **Search terms**：7 个（JSON、JSON formatter、JSON viewer、JSON pretty print、
   API response viewer、JSON highlighter、JSON tree，合计 15 个单词 ≤ 21 上限）
 
@@ -210,7 +266,7 @@ Partner Center 首页 → **Workspaces** 区域点 **Edge** 卡片 → 概览页
 测试步骤：
 1. 安装后访问任意返回 JSON 的接口，例如 https://api.github.com/repos/microsoft/edge-extensions
    页面应自动切换为格式化视图（可折叠树 + 语法高亮）。
-2. 点击任意键名可复制 JSONPath；工具栏可搜索、切换主题、复制/下载格式化结果。
+2. 点击任意键名可复制 JSONPath；工具栏可切换主题、切换美化/压缩、复制或下载结果。
 3. 点击工具栏「还原原文」可恢复浏览器默认的纯文本显示。
 4. 点击工具栏图标打开弹窗，可手动「格式化当前页面」。
 5. 扩展不发起任何网络请求，不采集任何数据。
