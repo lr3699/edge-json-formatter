@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>zoom</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #222; }
+  .stage { position: relative; overflow: hidden; }
+  .stage img {
+    position: absolute;
+    transform-origin: 0 0;
+    image-rendering: pixelated;
+  }
+</style>
+</head>
+<body>
+<script>
+  var q = new URLSearchParams(location.search);
+  var src = q.get('src');
+  var x = parseFloat(q.get('x') || '0');
+  var y = parseFloat(q.get('y') || '0');
+  var w = parseFloat(q.get('w') || '600');
+  var h = parseFloat(q.get('h') || '200');
+  var z = parseFloat(q.get('z') || '3');
+
+  var stage = document.createElement('div');
+  stage.className = 'stage';
+  stage.style.width = (w * z) + 'px';
+  stage.style.height = (h * z) + 'px';
+
+  var img = document.createElement('img');
+  img.src = src;
+  img.style.left = (-x * z) + 'px';
+  img.style.top = (-y * z) + 'px';
+  img.style.transform = 'scale(' + z + ')';
+  stage.appendChild(img);
+  document.body.appendChild(stage);
+</script>
+</body>
+</html>

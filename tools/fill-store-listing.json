@@ -1,0 +1,10 @@
+{
+  "deep": true,
+  "fields": [
+    {
+      "selector": "#formly_50_textarea_description_1",
+      "visual": false,
+      "value": "JSON Formatter Pro automatically turns raw JSON responses into a clean, collapsible, syntax-highlighted tree — no more squinting at one endless line of minified JSON.\n\nFEATURES\n• Automatic detection — open any JSON URL or API response and it is formatted instantly\n• Syntax highlighting with both light and dark themes\n• Collapsible tree — expand or collapse objects and arrays node by node\n• Instant search — filter keys and values, and jump between matches\n• Copy JSON path — one click copies a path such as data.items[0].id\n• Escape control — keep or restore \\uXXXX escapes exactly as you prefer\n• Line numbers, compact mode, font size and indent width options\n• 100% local — all parsing happens in your browser; nothing is uploaded\n\nHOW TO USE\n1. Open a JSON API endpoint or a .json file in Microsoft Edge.\n2. The viewer takes over automatically. If it does not, click the toolbar icon and press Format.\n3. Press Alt+Shift+J to toggle formatting on the current page.\n4. Configure theme and indentation on the options page.\n\nTYPICAL USES\nDebugging REST and GraphQL APIs, inspecting configuration files, reading logs, and reviewing webhook payloads.\n\nPRIVACY\nThis extension does not collect, store or transmit any personal data. Preferences such as theme, indent width and font size are saved locally in your own browser."
+    }
+  ]
+}

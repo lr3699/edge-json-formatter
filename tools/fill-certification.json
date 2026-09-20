@@ -1,0 +1,16 @@
+{
+  "deep": true,
+  "fields": [
+    {
+      "selector": "#testerInfoNo",
+      "check": true,
+      "visual": false,
+      "allowHidden": true
+    },
+    {
+      "selector": "textarea[name=certificationNotes]",
+      "visual": false,
+      "value": "JSON Formatter Pro is a client-side JSON viewer. No account, credentials or special setup is required to test it.\n\nHOW TO TEST\n1. Install the extension and open a public JSON endpoint, for example https://jsonplaceholder.typicode.com/todos/1 — the response should render as a collapsible, syntax-highlighted tree instead of raw text.\n2. Use the toolbar to collapse/expand all nodes, change the indent width, switch between the light and dark theme, and toggle line numbers.\n3. Type a keyword into the search box to filter keys and values; click the path bar to copy a JSONPath-style path such as data.list[0].id.\n4. Click the toolbar icon to open the popup, then open the options page (right-click the icon > Options) to change theme, indent width, font size and auto-collapse depth.\n5. Press Alt+Shift+J, or use the right-click menu entry, to toggle between the formatted view and the original raw text.\n6. Also try a non-JSON page: the extension must not alter it.\n\nPERMISSIONS\n- storage: saves display preferences locally in the browser only.\n- contextMenus: adds the right-click entry used in step 5.\n- activeTab: lets the toolbar popup communicate with the current tab.\n- <all_urls> host permission: the content script must read the page text to decide whether the response is JSON before it takes over rendering.\n\nPRIVACY AND REMOTE CODE\nAll parsing happens locally in the browser. The extension collects and transmits no user data. It bundles no analytics and loads no remote code."
+    }
+  ]
+}

@@ -1,0 +1,690 @@
+/* ==========================================================================
+   粘贴 JSON 格式化 · 独立页样式
+   --------------------------------------------------------------------------
+   设计目标：像一个正经的开发者工具，而不是「一个贴了 JSON 的空白页」。
+   - 三区布局：顶栏 / 工作区（输入 | splitter | 输出）
+   - 柔和的极光背景 + 分层阴影，避免大面积纯白/纯黑
+   - 格式化完成后的「逐行错落浮现」动效（见文件末尾 @keyframes rowIn）
+   ========================================================================== */
+
+* { box-sizing: border-box; }
+
+/* ---------------------------------------------------------------- tokens */
+
+:root {
+  --page: #f4f6f9;
+  --panel: #ffffff;
+  --panel-2: #f8fafc;
+  --border: #e4e8ee;
+  --border-soft: #eef1f5;
+
+  --text: #1b1f24;
+  --text-2: #4a5158;
+  --muted: #7b828c;
+
+  --brand: #2fae52;
+  --brand-2: #1f9d7a;
+  --accent: #2b9fe0;
+  --ok: #2fae52;
+  --err: #d94a4a;
+  --violet: #8a5cf6;
+
+  --ring: rgba(43, 159, 224, .28);
+
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, .04);
+  --shadow-md: 0 4px 16px -4px rgba(16, 24, 40, .10), 0 1px 3px rgba(16, 24, 40, .05);
+  --shadow-lg: 0 20px 48px -20px rgba(16, 24, 40, .22);
+
+  --blob-opacity: .5;
+
+  --mono: "Cascadia Mono", Consolas, ui-monospace, SFMono-Regular, Menlo,
+          "Liberation Mono", "Courier New", monospace;
+  --ui: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+
+  --radius: 14px;
+  --split: 36%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #0e1015;
+    --panel: #15181e;
+    --panel-2: #191d24;
+    --border: #262b34;
+    --border-soft: #1f242c;
+
+    --text: #e7eaf0;
+    --text-2: #b6bdc9;
+    --muted: #828b99;
+
+    --brand: #3fc06a;
+    --brand-2: #2fbfa0;
+    --accent: #4db8f0;
+    --ok: #4cc97a;
+    --err: #ff8080;
+    --violet: #a78bfa;
+
+    --ring: rgba(77, 184, 240, .3);
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+    --shadow-md: 0 4px 18px -4px rgba(0, 0, 0, .55), 0 1px 3px rgba(0, 0, 0, .4);
+    --shadow-lg: 0 24px 56px -22px rgba(0, 0, 0, .75);
+
+    --blob-opacity: .34;
+  }
+}
+
+html, body { height: 100%; margin: 0; }
+
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--page);
+  color: var(--text);
+  font: 13.5px/1.5 var(--ui);
+  -webkit-font-smoothing: auto;
+}
+
+/* ------------------------------------------------------- 极光背景（装饰） */
+
+.aurora {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.blob {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: var(--blob-opacity);
+  will-change: transform;
+}
+
+.blob-a {
+  width: 46vw; height: 46vw; left: -12vw; top: -16vw;
+  background: radial-gradient(circle, var(--brand) 0%, transparent 68%);
+  animation: drift-a 34s ease-in-out infinite;
+}
+
+.blob-b {
+  width: 40vw; height: 40vw; right: -10vw; top: -12vw;
+  background: radial-gradient(circle, var(--accent) 0%, transparent 68%);
+  animation: drift-b 41s ease-in-out infinite;
+}
+
+.blob-c {
+  width: 38vw; height: 38vw; right: 14vw; bottom: -20vw;
+  background: radial-gradient(circle, var(--violet) 0%, transparent 70%);
+  animation: drift-c 47s ease-in-out infinite;
+}
+
+@keyframes drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(4vw, 3vw, 0) scale(1.08); }
+}
+@keyframes drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(-5vw, 4vw, 0) scale(1.12); }
+}
+@keyframes drift-c {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(3vw, -4vw, 0) scale(1.06); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blob { animation: none !important; }
+}
+
+/* ---------------------------------------------------------------- 顶栏 */
+
+.topbar {
+  position: relative;
+  z-index: 3;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--panel) 72%, transparent);
+  backdrop-filter: saturate(180%) blur(14px);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: linear-gradient(140deg, var(--brand), var(--brand-2));
+  color: #fff;
+  box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--brand) 70%, transparent);
+}
+
+.brand-mark svg { width: 19px; height: 19px; }
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.brand-text b { font-size: 14.5px; letter-spacing: .1px; }
+.brand-text em {
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.topbar-tools {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.keys i { font-style: normal; opacity: .6; }
+
+kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--panel);
+  font: 11px/1.4 var(--ui);
+  color: var(--text-2);
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------- 按钮 */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+  transition: background .16s, border-color .16s, color .16s,
+              box-shadow .16s, transform .1s;
+}
+
+.btn svg { width: 15px; height: 15px; }
+
+.btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(0) scale(.985);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.btn-sm { height: 28px; padding: 0 11px; font-size: 12px; border-radius: 8px; }
+
+.btn-ghost {
+  background: transparent;
+  box-shadow: none;
+  border-color: transparent;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* ---------------------------------------------------------------- 工作区 */
+
+.workspace {
+  position: relative;
+  z-index: 2;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--split) 12px minmax(0, 1fr);
+  padding: 16px 20px 20px;
+  gap: 0;
+}
+
+.panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  animation: panelIn .5s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.panel-output { animation-delay: .06s; }
+
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(10px) scale(.994); }
+  to   { opacity: 1; transform: none; }
+}
+
+.panel-input:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  box-shadow: var(--shadow-md), 0 0 0 3px var(--ring);
+}
+
+.panel-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px 9px 14px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--panel-2);
+}
+
+.panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dot-i {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: 0 0 auto;
+}
+
+.dot-in {
+  background: linear-gradient(140deg, var(--brand), var(--brand-2));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 16%, transparent);
+}
+
+.panel-tools { display: inline-flex; gap: 7px; }
+
+.panel-foot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 14px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--panel-2);
+  font-size: 12px;
+  min-height: 34px;
+}
+
+.muted { color: var(--muted); white-space: nowrap; }
+
+.msg {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color .2s;
+}
+
+.msg.ok { color: var(--ok); }
+.msg.err { color: var(--err); }
+
+/* -------------------------------------------------------------- 状态胶囊 */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 10px 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  font-size: 11.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+  transition: border-color .2s, background .2s, color .2s;
+}
+
+.pill-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: 0 0 auto;
+  transition: background .2s, box-shadow .2s;
+}
+
+.pill.is-ok {
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--border));
+  background: color-mix(in srgb, var(--ok) 9%, var(--panel));
+  color: var(--ok);
+}
+.pill.is-ok .pill-dot {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent);
+}
+
+.pill.is-err {
+  border-color: color-mix(in srgb, var(--err) 40%, var(--border));
+  background: color-mix(in srgb, var(--err) 9%, var(--panel));
+  color: var(--err);
+}
+.pill.is-err .pill-dot { background: var(--err); }
+
+/* 这里的圆点刻意不做任何循环动画。
+   连续输入时胶囊会在「解析中…」和「格式化成功」之间来回切，
+   每切一次动画就从头播一遍，观感就是状态栏一直在闪。
+   改用三档静态配色表达状态：灰=就绪 / 蓝=解析中 / 绿=成功 / 红=失败。 */
+.pill.is-busy .pill-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* -------------------------------------------------------------- 输入区 */
+
+.editor-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
+
+#input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  resize: none;
+  border: 0;
+  outline: none;
+  padding: 14px 16px;
+  background: var(--panel);
+  color: var(--text);
+  font: 500 14.5px/1.7 var(--mono);
+  tab-size: 2;
+  white-space: pre;
+  overflow: auto;
+  caret-color: var(--brand);
+}
+
+#input::placeholder {
+  color: var(--muted);
+  opacity: .8;
+  line-height: 1.9;
+}
+
+.panel-input.is-dragover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md), 0 0 0 3px var(--ring);
+}
+
+.panel-input.is-dragover::after {
+  content: "松开即可读入文件";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  backdrop-filter: blur(2px);
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none;
+  animation: fadeIn .18s ease-out;
+}
+
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+
+/* ------------------------------------------------------- 分割条（可拖动） */
+
+.splitter {
+  display: grid;
+  place-items: center;
+  cursor: col-resize;
+  outline: none;
+}
+
+.splitter-grip {
+  width: 3px;
+  height: 46px;
+  border-radius: 3px;
+  background: var(--border);
+  transition: background .18s, height .18s;
+}
+
+.splitter:hover .splitter-grip,
+.splitter:focus-visible .splitter-grip,
+.splitter.is-dragging .splitter-grip {
+  background: var(--accent);
+  height: 74px;
+}
+
+/* -------------------------------------------------------------- 输出区 */
+
+.panel-output { position: relative; }
+
+/* 这里原来有一条「防抖等待期间来回扫动」的进度条。
+   实测它在连续输入时会随 220ms 防抖反复亮起/熄灭，观感就是整块面板在闪；
+   解析状态现在只由底部的状态胶囊表达（解析中… / 格式化成功 / 格式有误），
+   面板本身不再做任何闪烁类反馈。 */
+
+.viewer-host {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+
+.viewer-host[hidden] { display: none; }
+
+/* 查看器本体（.jf-root）撑满宿主。
+   注意：.jf-root 自带 `all:initial`，这里的选择器权重 (0,2,0) 高于它，故可覆盖。 */
+.viewer-host > .jf-root {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+/* -------------------------------------------------------------- 欢迎页 */
+
+.welcome {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 32px;
+  text-align: center;
+  color: var(--muted);
+  animation: fadeIn .3s ease-out;
+}
+
+.welcome[hidden] { display: none; }
+
+.welcome-art {
+  width: 132px;
+  height: 106px;
+  margin-bottom: 10px;
+  color: var(--accent);
+  opacity: .75;
+}
+
+.welcome-art svg { width: 100%; height: 100%; }
+
+.welcome h2 {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.welcome p {
+  margin: 4px 0 12px;
+  font-size: 13px;
+  max-width: 400px;
+  line-height: 1.7;
+}
+
+.welcome-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  line-height: 2;
+}
+
+.welcome-list li::before {
+  content: "";
+  display: inline-block;
+  width: 4px; height: 4px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  vertical-align: 2px;
+}
+
+/* ==========================================================================
+   格式化动效 —— 逐行错落浮现
+   行延迟由 editor.js 写入内联 animation-delay。
+   仅在 class `is-fresh`（= 一次真正的内容变更）期间生效，
+   所以折叠/展开等内部重渲染不会反复播放。
+
+   刻意只有「位移 + 透明度」，不出现以下三种会让整块面板看起来在闪的东西：
+     - 面板外圈高亮（box-shadow 扩散）
+     - 文字/整行的 blur 过渡（模糊→清晰在文字上会读出抖动）
+     - 会随输入反复开关的状态条
+   ========================================================================== */
+
+.viewer-host .jf-row { opacity: 1; }
+
+.viewer-host.is-fresh .jf-row {
+  animation: rowIn .42s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+@keyframes rowIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* 工具栏滑入 */
+.viewer-host.is-fresh .jf-toolbar {
+  animation: barIn .42s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+@keyframes barIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* 状态栏淡入 */
+.viewer-host.is-fresh .jf-status {
+  animation: fadeIn .42s .1s ease-out both;
+}
+
+/* 查看器的提示条：贴合本页风格 */
+.viewer-host .jf-toast {
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+}
+
+/* ------------------------------------------------------------ 全屏 / 沉浸 */
+
+/* 全屏时铺满底色，避免浏览器给出黑底或白底 */
+:fullscreen { background: var(--page); }
+html.is-fullscreen { height: 100%; background: var(--page); }
+html.is-fullscreen body { height: 100%; }
+
+/* 沉浸阅读：左栏与分隔条让位，输出区独占整个工作区。
+   放在窄屏媒体查询之后，靠 .workspace.is-focus 的更高权重覆盖其列定义。 */
+.workspace.is-focus {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.workspace.is-focus > .panel-input,
+.workspace.is-focus > .splitter { display: none; }
+
+/* 全屏时收紧外边距，把空间尽量留给内容 */
+html.is-fullscreen .workspace { padding: 10px 12px 12px; }
+
+/* 按钮上的展开 / 收起图标按状态切换 */
+.btn .icon-collapse { display: none; }
+html.is-fullscreen .btn .icon-expand { display: none; }
+html.is-fullscreen .btn .icon-collapse { display: block; }
+
+.keys-sep { font-style: normal; opacity: .45; margin: 0 2px; }
+
+/* ------------------------------------------------------------ 窄屏堆叠 */
+
+@media (max-width: 900px) {
+  body { overflow: auto; }
+
+  .workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(150px, 36vh) minmax(260px, 1fr);
+    gap: 14px;
+    height: auto;
+  }
+
+  .splitter { display: none; }
+  .keys { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewer-host.is-fresh .jf-row,
+  .viewer-host.is-fresh .jf-toolbar,
+  .viewer-host.is-fresh .jf-status,
+  .panel { animation: none !important; }
+}

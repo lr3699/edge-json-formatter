@@ -1,0 +1,12 @@
+# 构建产物 —— 用 `node tools/build.js` 可随时重新生成，不入库
+dist/
+
+# 依赖与缓存
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+
+# 临时与日志
+.tmp_*
+*.log

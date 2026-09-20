@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JSON 格式化查看器 · JSON Formatter Pro</title>
+  <meta name="description" content="自动美化网页中的 JSON：语法高亮、可折叠树、搜索定位、路径复制、转义保留/还原、浅色与深色主题。">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M10 3.5H8.2A2.2 2.2 0 0 0 6 5.7v2.6A2.2 2.2 0 0 1 3.8 10.5 2.2 2.2 0 0 1 6 12.7v2.6A2.2 2.2 0 0 0 8.2 17.5H10"/>
+          <path d="M14 3.5h1.8A2.2 2.2 0 0 1 18 5.7v2.6a2.2 2.2 0 0 0 2.2 2.2A2.2 2.2 0 0 0 18 12.7v2.6a2.2 2.2 0 0 1-2.2 2.2H14"/>
+        </svg>
+        <span>JSON 格式化查看器</span>
+      </a>
+      <nav>
+        <a href="index.html" class="active">功能介绍</a>
+        <a href="privacy.html">隐私政策</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="hero">
+      <h1>把一坨挤在一起的 JSON<br>变成能逐层展开的树</h1>
+      <p class="lead">
+        专为 Microsoft Edge 设计的 JSON 查看器。打开接口地址即自动格式化，语法高亮、可折叠、
+        可搜索、可复制路径 —— 并且不会弄丢你的大整数。
+      </p>
+      <div class="cta">
+        <a class="btn btn-solid" href="#" id="install">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3.5v12"/><path d="m7.5 11 4.5 4.5 4.5-4.5"/><path d="M4.5 20.5h15"/>
+          </svg>
+          安装到 Edge
+        </a>
+        <a class="btn btn-ghost" href="../preview/demo.html">查看界面预览</a>
+      </div>
+      <p class="hint">安装后无需任何配置，访问 JSON 接口即刻生效。</p>
+    </div>
+
+    <section>
+      <h2>效果</h2>
+      <pre class="sample">{
+  <span class="k">"code"</span><span class="p">:</span> <span class="s">"0"</span><span class="p">,</span>
+  <span class="k">"msg"</span><span class="p">:</span> <span class="s">"success"</span><span class="p">,</span>
+  <span class="k">"data"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="k">"pageNum"</span><span class="p">:</span> <span class="n">1</span><span class="p">,</span>
+    <span class="k">"pageSize"</span><span class="p">:</span> <span class="n">10</span><span class="p">,</span>
+    <span class="k">"hasNext"</span><span class="p">:</span> <span class="b">true</span><span class="p">,</span>
+    <span class="k">"list"</span><span class="p">:</span> <span class="p">[</span>
+      <span class="p">{</span>
+        <span class="k">"orderId"</span><span class="p">:</span> <span class="s">"600653836507516928"</span><span class="p">,</span>
+        <span class="k">"orderTime"</span><span class="p">:</span> <span class="n">1784173433013</span><span class="p">,</span>
+        <span class="k">"storeName"</span><span class="p">:</span> <span class="s">"Hello Kity"</span>
+      <span class="p">}</span>
+    <span class="p">]</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre>
+      <p class="hint" style="margin-top:12px">
+        键名紫色加粗、字符串绿色、数字浅蓝、布尔珊瑚红 —— 折叠标记 ⊕/⊖ 就落在键与括号之间。
+      </p>
+    </section>
+
+    <section>
+      <h2>核心功能</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>自动识别并美化</h3>
+          <p>支持 application/json、application/*+json 等响应类型，打开即自动格式化；text/plain 返回的 JSON 也能自动识别。</p>
+        </div>
+        <div class="card">
+          <h3>可折叠的树形结构</h3>
+          <p>任意节点单独折叠展开，也可一键全部折叠、全部展开，或直接「展开到第 N 层」。折叠节点会显示「… 13 个字段」摘要。</p>
+        </div>
+        <div class="card">
+          <h3>搜索定位</h3>
+          <p>实时匹配所有键名与值（含被转义的内容），显示「3/11」命中计数，支持上下跳转，自动展开命中路径并高亮。</p>
+        </div>
+        <div class="card">
+          <h3>复制 JSONPath</h3>
+          <p>点击任意键名即复制该字段的完整路径，例如 <code>$.data.list[0].orderId</code>；点击值则复制值本身。</p>
+        </div>
+        <div class="card">
+          <h3>保留 / 还原转义</h3>
+          <p>默认保留源码写法，<code>"a\nb"</code> 就显示成 <code>\n</code> 两个字符；取消勾选则还原为真实的换行与中文。</p>
+        </div>
+        <div class="card">
+          <h3>数字精度零丢失</h3>
+          <p>使用自研解析器而非 JSON.parse，<code>600653836507516928</code> 这类超出安全整数范围的订单号不会被改成 <code>…930</code>。</p>
+        </div>
+        <div class="card">
+          <h3>出错也能定位</h3>
+          <p>JSON 格式非法时给出精确的行号列号并用插入符标出位置，还提供「宽松解析」一键处理注释、单引号、尾随逗号。</p>
+        </div>
+        <div class="card">
+          <h3>多种入口</h3>
+          <p>打开 JSON 页面自动格式化、工具栏弹窗一键格式化、右键菜单格式化选中内容、快捷键 <code>Alt+Shift+J</code>。</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>安全与隐私</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>不采集任何数据</h3>
+          <p>不上传内容、不做网络请求、无埋点统计、无远程代码。可在开发者工具 Network 面板自行验证。</p>
+        </div>
+        <div class="card">
+          <h3>与网页完全隔离</h3>
+          <p>查看器运行在 Shadow DOM 中，既不会被网页样式影响，也不会污染网页；随时可点「还原原文」恢复默认显示。</p>
+        </div>
+      </div>
+      <p class="hint" style="margin-top:14px">详见 <a href="privacy.html">隐私政策</a>。</p>
+    </section>
+  </main>
+
+  <footer class="bot">
+    <div class="wrap">
+      <span>JSON 格式化查看器 · JSON Formatter Pro</span>
+      <span><a href="privacy.html">隐私政策</a></span>
+    </div>
+  </footer>
+
+  <script>
+    // 商店链接上线后填到这里即可
+    var STORE_URL = '';
+    var btn = document.getElementById('install');
+    if (STORE_URL) {
+      btn.href = STORE_URL;
+      btn.target = '_blank';
+      btn.rel = 'noopener';
+    } else {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        alert('扩展正在提交 Microsoft Edge 加载项商店审核。\n审核通过前，可先用「查看界面预览」体验效果。');
+      });
+    }
+  </script>
+</body>
+</html>

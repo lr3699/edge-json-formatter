@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>隐私政策 · JSON 格式化查看器</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M10 3.5H8.2A2.2 2.2 0 0 0 6 5.7v2.6A2.2 2.2 0 0 1 3.8 10.5 2.2 2.2 0 0 1 6 12.7v2.6A2.2 2.2 0 0 0 8.2 17.5H10"/>
+          <path d="M14 3.5h1.8A2.2 2.2 0 0 1 18 5.7v2.6a2.2 2.2 0 0 0 2.2 2.2A2.2 2.2 0 0 0 18 12.7v2.6a2.2 2.2 0 0 1-2.2 2.2H14"/>
+        </svg>
+        <span>JSON 格式化查看器</span>
+      </a>
+      <nav>
+        <a href="index.html">功能介绍</a>
+        <a href="privacy.html" class="active">隐私政策</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap doc">
+    <h1>隐私政策</h1>
+    <p class="meta">适用于 Microsoft Edge 扩展「JSON 格式化查看器 - JSON Formatter Pro」 · 最后更新：2026-09-20</p>
+
+    <div class="callout">
+      <strong>一句话总结：</strong>本扩展不采集、不存储、不传输任何用户数据。
+      所有处理都在你的浏览器本地完成。
+    </div>
+
+    <h2>1. 我们收集哪些数据</h2>
+    <p><strong>不收集任何数据。</strong>具体而言：</p>
+    <ul>
+      <li>不收集个人身份信息（姓名、邮箱、账号等）</li>
+      <li>不收集浏览历史、访问的网址或页面内容</li>
+      <li>不收集设备信息、地理位置、IP 地址</li>
+      <li>不使用 Cookie、指纹识别或任何追踪技术</li>
+      <li>不进行任何统计分析、埋点或 A/B 测试</li>
+    </ul>
+
+    <h2>2. 页面内容如何处理</h2>
+    <p>
+      当页面返回 JSON 时，扩展在<strong>你本机浏览器的内存中</strong>解析并渲染这些内容，用于提供格式化显示。
+      JSON 原文与解析结果<strong>不会离开你的设备</strong>，不会写入磁盘，也不会发送到任何服务器。
+    </p>
+    <p>关闭标签页后，这些内容即从内存中释放。</p>
+
+    <h2>3. 本地保存的数据</h2>
+    <p>扩展仅使用浏览器自带的 <code>chrome.storage.sync</code> 保存你的<strong>显示偏好</strong>，包括：</p>
+    <ul>
+      <li>是否自动格式化</li>
+      <li>默认主题（浅色 / 深色 / 跟随系统）</li>
+      <li>缩进宽度、字号、是否显示行号</li>
+      <li>是否默认保留转义</li>
+      <li>自动格式化的体积上限</li>
+    </ul>
+    <p>
+      这些偏好不包含任何个人信息。若你登录了浏览器账号，浏览器自身的同步机制可能在其服务器上同步这些设置——
+      这是浏览器厂商提供的能力，与本扩展无关，且其中不含任何可识别你身份的内容。
+    </p>
+
+    <h2>4. 网络访问</h2>
+    <p>
+      本扩展<strong>不发起任何网络请求</strong>，不加载任何远程脚本、样式或资源，所有代码都打包在安装包内。
+      你可以打开浏览器开发者工具的 Network 面板自行验证。
+    </p>
+
+    <h2>5. 第三方共享</h2>
+    <p><strong>无。</strong>我们没有任何第三方服务商，也不会向任何第三方出售、出租或共享数据。</p>
+
+    <h2>6. 权限用途</h2>
+    <table>
+      <thead>
+        <tr><th>权限</th><th>用途</th><th>是否涉及数据外传</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>storage</code></td><td>保存上述显示偏好</td><td>否</td></tr>
+        <tr><td><code>contextMenus</code></td><td>提供右键菜单入口</td><td>否</td></tr>
+        <tr><td><code>activeTab</code></td><td>工具栏弹窗与当前标签页通信</td><td>否</td></tr>
+        <tr><td><code>&lt;all_urls&gt;</code></td><td>内容脚本需要在页面加载时判断是否为 JSON 并接管渲染</td><td>否</td></tr>
+      </tbody>
+    </table>
+    <p>
+      其中 <code>&lt;all_urls&gt;</code> 主机权限是必需的：扩展只有在目标页面加载时才能读取该页文本、
+      判断它是否为 JSON。扩展<strong>仅读取当前页面的文本内容</strong>并就地渲染，不发送任何数据到任何地方。
+    </p>
+
+    <h2>7. 儿童隐私</h2>
+    <p>本扩展不面向儿童，也不收集任何年龄段用户的数据。</p>
+
+    <h2>8. 政策变更</h2>
+    <p>若本政策发生变更，我们会更新本页顶部的「最后更新」日期，并在扩展更新说明中注明。</p>
+
+    <h2>9. 联系方式</h2>
+    <p>如有隐私相关问题，请通过扩展商店页面提供的开发者联系方式与我们联系。</p>
+
+    <hr>
+
+    <h2 id="en">English Summary</h2>
+    <p>
+      This extension collects <strong>no data whatsoever</strong>. It performs all JSON parsing and rendering
+      locally in your browser's memory. Page contents never leave your device. It stores only your display
+      preferences (theme, indent, font size, toggles) in <code>chrome.storage.sync</code>, makes no network
+      requests, bundles no remote code, and shares nothing with third parties.
+    </p>
+  </main>
+
+  <footer class="bot">
+    <div class="wrap">
+      <span>JSON 格式化查看器 · JSON Formatter Pro</span>
+      <span><a href="index.html">功能介绍</a></span>
+    </div>
+  </footer>
+</body>
+</html>

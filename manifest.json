@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "JSON 格式化查看器 - JSON Formatter Pro",
+  "version": "1.1.0",
+  "description": "自动美化网页中的 JSON：语法高亮、可折叠树、搜索定位、路径复制、转义保留/还原、浅色与深色主题。",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "JSON 格式化查看器",
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "src/shared/defaults.js",
+        "src/content/json-parser.js",
+        "src/content/viewer.js",
+        "src/content/content.js"
+      ],
+      "run_at": "document_end",
+      "all_frames": false,
+      "match_about_blank": false
+    }
+  ],
+  "permissions": ["storage", "contextMenus", "activeTab"],
+  "host_permissions": ["<all_urls>"],
+  "options_ui": {
+    "page": "src/options/options.html",
+    "open_in_tab": true
+  },
+  "commands": {
+    "toggle-format": {
+      "suggested_key": {
+        "default": "Alt+Shift+J"
+      },
+      "description": "格式化 / 还原当前页面 JSON"
+    }
+  },
+  "minimum_chrome_version": "102"
+}

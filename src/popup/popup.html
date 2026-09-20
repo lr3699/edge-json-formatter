@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>JSON 格式化查看器</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="head">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M9 4H7.5A2.5 2.5 0 0 0 5 6.5v3A2.5 2.5 0 0 1 2.5 12 2.5 2.5 0 0 1 5 14.5v3A2.5 2.5 0 0 0 7.5 20H9"/>
+        <path d="M15 4h1.5A2.5 2.5 0 0 1 19 6.5v3A2.5 2.5 0 0 0 21.5 12 2.5 2.5 0 0 0 19 14.5v3A2.5 2.5 0 0 1 16.5 20H15"/>
+      </svg>
+      <span>JSON 格式化查看器</span>
+    </div>
+    <span id="version" class="version"></span>
+  </header>
+
+  <section class="status" id="status">
+    <span class="dot" id="dot"></span>
+    <span class="status-text" id="statusText">正在检测当前页面…</span>
+  </section>
+
+  <section class="actions actions-primary">
+    <button id="btnPaste" class="btn btn-primary" type="button">粘贴 JSON 格式化</button>
+  </section>
+
+  <section class="actions">
+    <button id="btnFormat" class="btn" type="button">格式化当前页面</button>
+    <button id="btnRestore" class="btn" type="button">还原原始文本</button>
+  </section>
+
+  <section class="options">
+    <label class="row">
+      <span>打开 JSON 页面时自动格式化</span>
+      <input type="checkbox" id="autoFormat">
+    </label>
+    <label class="row">
+      <span>默认保留转义（\n、\uXXXX）</span>
+      <input type="checkbox" id="keepEscape">
+    </label>
+    <label class="row">
+      <span>主题</span>
+      <select id="theme">
+        <option value="auto">跟随系统</option>
+        <option value="light">浅色</option>
+        <option value="dark">深色</option>
+      </select>
+    </label>
+    <label class="row">
+      <span>缩进</span>
+      <select id="indent">
+        <option value="2">2 空格</option>
+        <option value="4">4 空格</option>
+        <option value="tab">Tab</option>
+      </select>
+    </label>
+  </section>
+
+  <footer class="foot">
+    <button id="btnOptions" class="link" type="button">更多设置</button>
+    <span class="hint">快捷键 Alt+Shift+J</span>
+  </footer>
+
+  <script src="../shared/defaults.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

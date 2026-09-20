@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>JSON 格式化查看器 · 设置</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main class="wrap">
+    <header class="head">
+      <div class="brand">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M9 4H7.5A2.5 2.5 0 0 0 5 6.5v3A2.5 2.5 0 0 1 2.5 12 2.5 2.5 0 0 1 5 14.5v3A2.5 2.5 0 0 0 7.5 20H9"/>
+          <path d="M15 4h1.5A2.5 2.5 0 0 1 19 6.5v3A2.5 2.5 0 0 0 21.5 12 2.5 2.5 0 0 0 19 14.5v3A2.5 2.5 0 0 1 16.5 20H15"/>
+        </svg>
+        <h1>JSON 格式化查看器 · 设置</h1>
+      </div>
+      <span class="version" id="version"></span>
+    </header>
+
+    <section class="card card-cta">
+      <h2>快速上手</h2>
+      <p class="note">
+        手头有一段 JSON（接口返回、服务端日志、聊天里复制来的）？
+        打开编辑页，粘贴进去就能实时格式化，支持折叠、搜索、复制路径与导出。
+      </p>
+      <button id="btnOpenEditor" class="btn-open" type="button">打开「粘贴 JSON 格式化」</button>
+    </section>
+
+    <section class="card">
+      <h2>接管页面</h2>
+      <label class="row">
+        <span class="label">
+          <b>自动格式化 JSON 页面</b>
+          <em>当网页以 JSON 内容类型返回时，自动切换到格式化视图</em>
+        </span>
+        <input type="checkbox" id="autoFormat">
+      </label>
+      <label class="row">
+        <span class="label">
+          <b>对纯文本 JSON 也自动格式化</b>
+          <em>部分接口用 text/plain 返回 JSON，勾选后同样自动接管</em>
+        </span>
+        <input type="checkbox" id="autoFormatPlainText">
+      </label>
+      <label class="row">
+        <span class="label">
+          <b>启用右键菜单</b>
+          <em>在页面右键中显示「JSON 格式化」入口</em>
+        </span>
+        <input type="checkbox" id="contextMenu">
+      </label>
+      <label class="row">
+        <span class="label">
+          <b>自动格式化体积上限</b>
+          <em>超过该体积的响应只提示不自动渲染，避免卡顿</em>
+        </span>
+        <select id="maxAutoSize">
+          <option value="1048576">1 MB</option>
+          <option value="4194304">4 MB</option>
+          <option value="12582912">12 MB</option>
+          <option value="52428800">50 MB</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>显示</h2>
+      <label class="row">
+        <span class="label">
+          <b>主题</b>
+          <em>查看器的配色方案</em>
+        </span>
+        <select id="theme">
+          <option value="auto">跟随系统</option>
+          <option value="light">浅色</option>
+          <option value="dark">深色</option>
+        </select>
+      </label>
+      <label class="row">
+        <span class="label">
+          <b>缩进</b>
+          <em>复制 / 下载时使用的缩进宽度</em>
+        </span>
+        <select id="indent">
+          <option value="2">2 空格</option>
+          <option value="4">4 空格</option>
+          <option value="tab">Tab</option>
+        </select>
+      </label>
+      <label class="row">
+        <span class="label">
+          <b>默认展开层级</b>
+          <em>打开时自动展开到第几层</em>
+        </span>
+        <select id="expandDepth">
+          <option value="1">1 层</option>
+          <option value="2">2 层</option>
+          <option value="3">3 层</option>
+          <option value="4">4 层</option>
+          <option value="5">5 层</option>
+          <option value="8">8 层</option>
+        </select>
+      </label>
+      <label class="row">
+        <span class="label">
+          <b>字号</b>
+          <em>查看器正文字号</em>
+        </span>
+        <select id="fontSize">
+          <option value="12">12 px</option>
+          <option value="13">13 px</option>
+          <option value="14">14 px</option>
+          <option value="15">15 px</option>
+          <option value="16">16 px</option>
+          <option value="18">18 px</option>
+          <option value="20">20 px</option>
+        </select>
+      </label>
+      <label class="row">
+        <span class="label">
+          <b>使用等宽字体</b>
+          <em>推荐开启。关闭后改用系统正文字体，同字号下看起来更大更清晰</em>
+        </span>
+        <input type="checkbox" id="monoFont">
+      </label>
+      <label class="row">
+        <span class="label">
+          <b>显示行号</b>
+          <em>在左侧显示可见行号</em>
+        </span>
+        <input type="checkbox" id="lineNumbers">
+      </label>
+      <label class="row">
+        <span class="label">
+          <b>对象键按字母排序</b>
+          <em>仅影响显示与导出顺序，不修改原始数据</em>
+        </span>
+        <input type="checkbox" id="sortKeys">
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>字符串显示</h2>
+      <label class="row">
+        <span class="label">
+          <b>默认保留转义</b>
+          <em>勾选：<code>"a\nb"</code> 原样显示反斜杠；取消：还原为真实换行</em>
+        </span>
+        <input type="checkbox" id="keepEscape">
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>快捷键</h2>
+      <p class="note">
+        格式化 / 还原当前页面：<kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>J</kbd>
+      </p>
+      <p class="note">
+        要修改快捷键，请打开 <code>edge://extensions/shortcuts</code>。
+      </p>
+    </section>
+
+    <div class="toast" id="toast">设置已保存</div>
+  </main>
+
+  <script src="../shared/defaults.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

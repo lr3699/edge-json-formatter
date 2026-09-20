@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>JSON 格式化查看器 · 效果预览</title>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #f6f8fa; }
+    #app { position: absolute; inset: 0; }
+    .demo-raw {
+      margin: 0;
+      padding: 12px 16px;
+      font: 12px/1.6 ui-monospace, Consolas, monospace;
+      color: #57606a;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .demo-switch {
+      position: fixed; right: 12px; top: 10px; z-index: 10;
+      font: 12px system-ui, sans-serif;
+    }
+    .demo-switch button {
+      height: 26px; padding: 0 10px; border: 1px solid #d8dee4; border-radius: 6px;
+      background: #fff; cursor: pointer; font: inherit;
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-switch">
+    <button id="reload">重新挂载查看器</button>
+    <button id="toggleRaw">显示原始 JSON</button>
+  </div>
+  <div id="app"></div>
+  <pre class="demo-raw" id="raw" hidden></pre>
+
+  <script src="../src/shared/defaults.js"></script>
+  <script src="../src/content/json-parser.js"></script>
+  <script src="../src/content/viewer.js"></script>
+  <script>
+    // 与参考截图一致的示例数据
+    var SAMPLE = '{"code":"0","msg":"success","data":{"pageNum":1,"pageSize":10,"hasNext":true,"list":[{"orderId":"600653836507516928","channel":"3","channelOrderId":"Z7240693014216110230","businessData":"","orderTime":1784173433013,"storeCode":"8882","storeName":"仙乐斯广场店","channelId":"3","channelName":"到店","portalSource":"1","portalSourceDesc":"店内用餐","orderDate":"2026-07-16 11:43","orderStatusInfo":{"iosStatus":"1","iosStatusDesc":"已支付","iosUpdateTime":"2026-07-16 11:43:53","ocStatus":"1","ocStatusDesc":"已推送中台","ocUpdateTime":"2026-07-16 11:43:56","kdsStatus":"1","kdsStatusDesc":"准备中","kdsUpdateTime":"2026-07-16 11:43:56"}}]}}';
+
+    var app = document.getElementById('app');
+    var rawEl = document.getElementById('raw');
+    var viewer = null;
+
+    // 开发辅助：把异常直接显示到页面上，便于无头浏览器排查
+    window.addEventListener('error', function (e) {
+      showFatal(e.error || e.message);
+    });
+    function showFatal(err) {
+      var msg = err && err.stack ? err.stack : String(err);
+      var box = document.getElementById('jf-fatal') || (function () {
+        var d = document.createElement('pre');
+        d.id = 'jf-fatal';
+        d.style.cssText = 'position:fixed;left:0;top:0;right:0;z-index:99999;margin:0;' +
+          'padding:12px;background:#ffe3e3;color:#8b0000;font:12px/1.5 monospace;white-space:pre-wrap;';
+        document.body.appendChild(d);
+        return d;
+      })();
+      box.textContent = msg;
+    }
+
+    // ?clean=1 隐藏调试按钮，?theme=dark 使用深色，?line=0 关闭行号
+    var params = new URLSearchParams(location.search);
+    if (params.get('clean') === '1') {
+      document.querySelector('.demo-switch').style.display = 'none';
+    }
+    var THEME = params.get('theme') === 'dark' ? 'dark' : 'light';
+    var LINE = params.get('line') !== '0';
+    var DEPTH = parseInt(params.get('depth') || '2', 10);
+    var QUERY = params.get('q') || '';
+    var KEEP_ESC = params.get('keepesc') !== '0';
+
+    function mount() {
+      try {
+        mountInner();
+      } catch (err) {
+        showFatal(err);
+        throw err;
+      }
+    }
+
+    function mountInner() {
+      app.innerHTML = '';
+      app.style.position = 'absolute';
+      app.style.inset = '0';
+      rawEl.hidden = true;
+      app.hidden = false;
+      viewer = EDGE_VIEWER_create(app, {
+        theme: THEME,
+        keepEscape: KEEP_ESC,
+        indent: 2,
+        expandDepth: DEPTH,
+        lineNumbers: LINE,
+        fontSize: 13
+      });
+      var ok = viewer.setText(SAMPLE);
+      if (ok && QUERY) {
+        var input = app.querySelector('.jf-search input');
+        if (input) {
+          input.value = QUERY;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }
+    }
+
+    // 预览页直接复用 createViewer
+    function EDGE_VIEWER_create(el, opts) {
+      return globalThis.__EDGE_JSON_FORMATTER__.createViewer(el, opts);
+    }
+
+    document.getElementById('reload').addEventListener('click', mount);
+    document.getElementById('toggleRaw').addEventListener('click', function () {
+      var showingRaw = !rawEl.hidden;
+      if (showingRaw) {
+        rawEl.hidden = true;
+        app.hidden = false;
+        this.textContent = '显示原始 JSON';
+      } else {
+        rawEl.textContent = SAMPLE;
+        rawEl.hidden = false;
+        app.hidden = true;
+        this.textContent = '显示格式化视图';
+      }
+    });
+
+    mount();
+  </script>
+</body>
+</html>
