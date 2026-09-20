@@ -1,0 +1,15 @@
+{
+  "deep": true,
+  "fields": [
+    {
+      "selector": "#testerInfoNo",
+      "check": true,
+      "allowHidden": true
+    },
+    {
+      "selector": "textarea[name=certificationNotes]",
+      "check": true,
+      "value": "本扩展无需登录、无需账号即可测试。\n\n测试步骤：\n1. 安装后访问任意返回 JSON 的接口，例如 https://api.github.com/repos/microsoft/vscode\n   页面应自动切换为格式化视图（可折叠树 + 语法高亮，默认全展开）。\n2. 点击工具栏图标，直接打开内置编辑页，粘贴一段 JSON 右栏即出结果。\n3. 工具栏 5 个按钮：保留转义、主题、美化/压缩、复制、下载，切换即时生效。\n4. 点击任意键名可复制 JSONPath。\n5. 扩展不发起任何网络请求、不采集任何数据（可在 DevTools Network 面板验证）。\n\n本版本（1.1.3）变更为：产品更名为 JSON Duo，新增中文（简体）商店语言；点击工具栏图标直接打开编辑页。权限与 1.1.0 完全一致。\n\n若某接口未自动格式化，说明其 Content-Type 不是 JSON，属于预期行为。"
+    }
+  ]
+}

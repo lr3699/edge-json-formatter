@@ -8,7 +8,7 @@
     "description": "Extension short name"
   },
   "extDescription": {
-    "message": "JSON Duo is a dual-pane JSON workbench: paste raw JSON on the left, see it rendered live on the right. Auto-detects and beautifies JSON on any page with syntax highlighting, a collapsible tree, JSONPath copy, escape keep/restore, light & dark themes, and one-click copy or download.",
+    "message": "Dual-pane JSON workbench: paste raw JSON, see it rendered live. Syntax highlighting, collapsible tree, JSONPath copy, escape keep/restore, light & dark themes.",
     "description": "Extension description"
   },
   "extTitle": {

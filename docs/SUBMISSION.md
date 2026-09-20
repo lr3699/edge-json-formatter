@@ -3,10 +3,33 @@
 > 依据 Microsoft 官方文档《Publish a Microsoft Edge extension》整理（2026-09 核对）。
 > 参考：https://learn.microsoft.com/microsoft-edge/extensions/publish/publish-extension
 
-## v1.1.3 更新：更名「JSON Duo」+ 中文化（待提交）
+## v1.1.3 更新：更名「JSON Duo」+ 中文化（**已提交，2026-09-20 22:5x，In review**）
 
-**改名 + 中文描述**，这是下一版（1.1.3）要走的更新流程。与以往不同，本次改了
-`manifest` 的名称与 `_locales`，所以 Partner Center 的语言识别会从 English 变成中文。
+**改名 + 中文描述**，走了完整的 Update 更新流程。
+
+| 项 | 值 |
+| --- | --- |
+| 提交 ID | `1152921505701937099` |
+| 版本 | 1.1.3（新名 **JSON Duo**） |
+| 状态 | **In review** |
+| 上一版（在售） | 1.1.0，提交 ID `1152921505701935289`，状态 `InExtensionStore` |
+| 商店语言 | Chinese (China) + English，**两行都 Complete** |
+| 认证说明 | 404 / 2000 字符，中文，tester 凭据选 **No** |
+| 上传包 | `dist/json-duo-1.1.3.zip`（74.4 KB） |
+
+改名后 `manifest` 走 `_locales` i18n，Store listings 由原来的 1 行 English 变成
+**Chinese (China) + English 两行**，两行都要填 Complete 才能 Publish（只填中文时
+`FocusNav/modulestatus` 的 listings 一直是 `required`）。
+
+> **踩坑**：
+> 1. **en 描述超长被拒收** —— 报 `The translation for Description in locale en is too long`，
+>    Edge 限制 **190 字符**（不是 132）。首次打包失败，把英文描述从 282 精简到 159 才过。
+> 2. 编辑面板填完**不能中途刷新页面**，未保存的长文案会丢（本次丢过一次，重填才保住）。
+> 3. 截图上传必须按区块定位（`document.querySelector('screenshots input[type=file]')`），
+>    用 `--index 2` 会因 Angular 重建 DOM 而串位/失效。
+> 4. 点 Close 关面板时可能连带把 Incomplete 的语言行 Remove 掉 —— 之后需 Add a language 加回。
+
+### 提交要点记录
 
 | 项 | 值 |
 | --- | --- |
