@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>JSON Duo 商店推广图</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px; background: #0b0d10;
+    font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #d7dbe0;
+  }
+  .tile {
+    position: relative; overflow: hidden; margin: 0 0 40px;
+    background: linear-gradient(135deg, #1b1e24 0%, #12141a 100%);
+    border-radius: 0;
+  }
+  .tile::before {
+    content: ""; position: absolute; inset: 0;
+    background:
+      radial-gradient(560px 300px at 8% 0%, rgba(58,181,74,.18), transparent 70%),
+      radial-gradient(520px 320px at 100% 100%, rgba(146,39,143,.18), transparent 70%);
+  }
+  .inner { position: relative; height: 100%; padding: 40px; display: flex; flex-direction: column; }
+
+  .brand { display: flex; align-items: center; gap: 18px; }
+  .brand img { display: block; }
+  .wordmark { font-weight: 800; letter-spacing: -.02em; color: #fff; line-height: 1; }
+  .tagline { color: #9aa0a6; margin-top: 14px; line-height: 1.5; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+  .chip {
+    font-size: 15px; color: #cfe9d4; background: rgba(58,181,74,.12);
+    border: 1px solid rgba(58,181,74,.32); border-radius: 999px; padding: 6px 14px;
+  }
+
+  .card {
+    background: #15171c; border: 1px solid #2b3038; border-radius: 14px;
+    padding: 22px 26px; font-family: ui-monospace, SFMono-Regular, Consolas, Menlo, monospace;
+    line-height: 1.85; white-space: pre; overflow: hidden;
+  }
+  .k { color: #c98ad4; }
+  .s { color: #79d17f; }
+  .n { color: #4dc4f0; }
+  .b { color: #ff8a8a; }
+  .p { color: #6f7681; }
+
+  /* ---- 小推广图 440 x 280 ---- */
+  #t-small { width: 440px; height: 280px; }
+  #t-small .inner { padding: 30px 32px; }
+  #t-small .brand img { width: 62px; height: 62px; }
+  #t-small .wordmark { font-size: 40px; }
+  #t-small .tagline { font-size: 15px; }
+  #t-small .chips { margin-top: auto; gap: 8px; }
+  #t-small .chip { font-size: 12px; padding: 4px 11px; }
+
+  /* ---- 大推广图 920 x 680 ---- */
+  #t-large { width: 920px; height: 680px; }
+  #t-large .inner { padding: 56px; }
+  #t-large .brand img { width: 104px; height: 104px; }
+  #t-large .wordmark { font-size: 74px; }
+  #t-large .tagline { font-size: 26px; margin-top: 20px; max-width: 660px; }
+  #t-large .chips { gap: 12px; }
+  #t-large .chip { font-size: 17px; padding: 8px 18px; }
+  #t-large .card { margin-top: 34px; font-size: 21px; flex: 1; }
+
+  /* ---- 横幅推广图 1400 x 560 ---- */
+  #t-marquee { width: 1400px; height: 560px; }
+  #t-marquee .inner { padding: 52px 60px; flex-direction: row; align-items: center; gap: 56px; }
+  #t-marquee .left { flex: 0 0 560px; }
+  #t-marquee .brand img { width: 96px; height: 96px; }
+  #t-marquee .wordmark { font-size: 68px; }
+  #t-marquee .tagline { font-size: 24px; max-width: 520px; }
+  #t-marquee .chips { gap: 12px; }
+  #t-marquee .chip { font-size: 16px; padding: 7px 16px; }
+  #t-marquee .card { flex: 1; font-size: 16px; height: 430px; padding: 24px 30px; }
+</style>
+</head>
+<body>
+
+<!-- 小推广图 440 x 280 -->
+<section class="tile" id="t-small">
+  <div class="inner">
+    <div class="brand">
+      <img src="../icons/icon128.png" alt="">
+      <div class="wordmark">JSON Duo</div>
+    </div>
+    <div class="tagline">粘贴即格式化 · 页面 JSON 一键美化</div>
+    <div class="chips">
+      <span class="chip">语法高亮</span>
+      <span class="chip">折叠树</span>
+      <span class="chip">明暗双主题</span>
+    </div>
+  </div>
+</section>
+
+<!-- 大推广图 920 x 680 -->
+<section class="tile" id="t-large">
+  <div class="inner">
+    <div class="brand">
+      <img src="../icons/icon128.png" alt="">
+      <div class="wordmark">JSON Duo</div>
+    </div>
+    <div class="tagline">双栏 JSON 工作台：左边粘贴原始 JSON，右侧实时渲染成可折叠的语法高亮树。</div>
+    <div class="chips">
+      <span class="chip">粘贴即时格式化</span>
+      <span class="chip">网页 JSON 一键美化</span>
+      <span class="chip">JSONPath 复制</span>
+      <span class="chip">大文件不卡</span>
+      <span class="chip">纯本地运行</span>
+    </div>
+    <div class="card"><span class="p">{</span>
+  <span class="k">"name"</span><span class="p">:</span> <span class="s">"JSON Duo"</span><span class="p">,</span>
+  <span class="k">"version"</span><span class="p">:</span> <span class="n">1.1</span><span class="p">,</span>
+  <span class="k">"theme"</span><span class="p">:</span> <span class="p">[</span><span class="s">"light"</span><span class="p">,</span> <span class="s">"dark"</span><span class="p">],</span>
+  <span class="k">"offline"</span><span class="p">:</span> <span class="b">true</span>
+<span class="p">}</span></div>
+  </div>
+</section>
+
+<!-- 横幅推广图 1400 x 560 -->
+<section class="tile" id="t-marquee">
+  <div class="inner">
+    <div class="left">
+      <div class="brand">
+        <img src="../icons/icon128.png" alt="">
+        <div class="wordmark">JSON Duo</div>
+      </div>
+      <div class="tagline">双栏 JSON 工作台 —— 粘贴即格式化，网页里的 JSON 一键变成可折叠、可检索、可复制路径的语法高亮树。</div>
+      <div class="chips">
+        <span class="chip">粘贴即时格式化</span>
+        <span class="chip">网页 JSON 一键美化</span>
+        <span class="chip">JSONPath 复制</span>
+        <span class="chip">明暗双主题</span>
+        <span class="chip">纯本地运行</span>
+      </div>
+    </div>
+    <div class="card"><span class="p">{</span>
+  <span class="k">"name"</span><span class="p">:</span> <span class="s">"JSON Duo"</span><span class="p">,</span>
+  <span class="k">"version"</span><span class="p">:</span> <span class="n">1.1</span><span class="p">,</span>
+  <span class="k">"features"</span><span class="p">:</span> <span class="p">[</span>
+    <span class="s">"粘贴格式化"</span><span class="p">,</span>
+    <span class="s">"折叠树"</span><span class="p">,</span>
+    <span class="s">"JSONPath 复制"</span><span class="p">,</span>
+    <span class="s">"明暗主题"</span>
+  <span class="p">],</span>
+  <span class="k">"theme"</span><span class="p">:</span> <span class="p">[</span><span class="s">"light"</span><span class="p">,</span> <span class="s">"dark"</span><span class="p">],</span>
+  <span class="k">"offline"</span><span class="p">:</span> <span class="b">true</span><span class="p">,</span>
+  <span class="k">"trackers"</span><span class="p">:</span> <span class="b">false</span>
+<span class="p">}</span></div>
+  </div>
+</section>
+
+</body>
+</html>
