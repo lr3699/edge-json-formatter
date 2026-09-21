@@ -143,7 +143,13 @@
     '.jf-row:hover{background:var(--jf-bg-hover);}',
     '.jf-no{flex:0 0 auto;width:4em;padding-right:1.1em;text-align:right;color:var(--jf-muted);',
     '  opacity:.55;user-select:none;font-size:.86em;line-height:2.03;background:var(--jf-bg);',
-    '  margin-left:calc(var(--jf-indent) * var(--jf-depth,0) * -1);}',
+    '  position:relative;',
+    '  /* 行号要钉在查看器最左侧。不能用负 margin：flex 里首项的负 margin 会把',
+    '     后面的内容一起拖过去，正好抵消 .jf-children 的嵌套缩进，开了行号整棵树',
+    '     就变平了。用 relative + left 只挪行号自己，不影响兄弟元素布局。每层实际',
+    '     横向开销 = --jf-indent + .jf-children 的 margin-left(2px) + 左边框(1px)，',
+    '     再补上 .jf-row 自身的 padding-left(3px)。 */',
+    '  left:calc(var(--jf-indent) * var(--jf-depth,0) * -1 - var(--jf-depth,0) * 3px - 3px);}',
     '.jf-content{flex:1 1 auto;min-width:0;}',
 
     /* 折叠子层：用嵌套容器 + 左侧引导线表达层级 */
