@@ -341,11 +341,9 @@ kbd {
   background: var(--panel);
   box-shadow: var(--shadow-sm);
   color: var(--text-2);
-  /* 每个按钮一个功能色，只作用于边框和背景（约 12% 底 + 38% 边），
-     图标和文字保持 inherit，不另外染色 */
+  /* 只用边框色区分功能（约 45% 功能色混入边框），底色保持面板色不动 */
   --btn-accent: var(--accent);
-  border-color: color-mix(in srgb, var(--btn-accent) 38%, var(--border));
-  background: color-mix(in srgb, var(--btn-accent) 12%, var(--panel));
+  border-color: color-mix(in srgb, var(--btn-accent) 45%, var(--border));
 }
 
 /* 功能色相：转换类偏青/紫，压缩偏琥珀，示例偏绿，清空是破坏性动作用红 */
@@ -364,8 +362,8 @@ kbd {
 .panel-tools .btn svg { width: 14px; height: 14px; }
 
 .panel-tools .btn:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--btn-accent) 60%, var(--border));
-  background: color-mix(in srgb, var(--btn-accent) 18%, var(--panel));
+  border-color: var(--btn-accent);
+  background: var(--panel-2);
   box-shadow: var(--shadow-sm);
   transform: none;
 }
