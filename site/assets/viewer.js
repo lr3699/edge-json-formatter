@@ -728,14 +728,26 @@
         else numberRow(closeRow);
 
         function toggleNode() {
-          flushFill();                       // 上一轮渐进渲染没建完就先收尾
+          /* 不再「先 flushFill 收尾再动 DOM」：那会把剩余文档同步建完
+             （total=Infinity 绕过了总量闸门，20MB 下就是几十秒假死）。
+             现在直接在队列里摘掉与本层相关的帧，后台续建照常分帧进行。 */
           node.expanded = !node.expanded;
           setToggleIcon(toggle, node.expanded);
           sum.style.display = node.expanded ? 'none' : '';
           kids.classList.toggle('jf-children-collapsed', !node.expanded);
           if (node.expanded) {
-            // 展开是用户主动动作：同步建这一层（超出 MAX_CHUNK 走哨兵 + 续建）。
-            // 行号由 renumber() 统一算，不能用会话计数器（插入点在文档中部）。
+            /* 折叠只是把子层 display:none，子行仍留在 DOM 里。
+               再展开前必须清掉重建，否则同一批子节点会被原样追加一遍——
+               折叠/展开几次就翻几倍（渐进渲染改造引入的回归）。
+               同时把队列里仍指向这层的帧摘掉：它们拿着旧的 i/total/moreRow，
+               留着会在续建时把剩余子节点再灌一遍。 */
+            kids.textContent = '';
+            for (var si = session.stack.length - 1; si >= 0; si--) {
+              var fk = session.stack[si].kidsEl;
+              if (fk === kids || kids.contains(fk)) session.stack.splice(si, 1);
+            }
+            /* 行号由 renumber() 统一算（插入点在文档中部，不能用会话计数器）；
+               被摘掉的帧欠着闭行行号，也要靠这趟全树重编号补回来。 */
             session.numbering = false;
             session.total = TOTAL_ROWS;
             session.budget = MAX_CHUNK;
@@ -746,7 +758,9 @@
               closeGut: null, moreRow: null
             });
             step();
+            if (session.stack.length) scheduleFill();   // 文档其余部分继续分帧补
           } else {
+            if (session.stack.length) session.numbering = false;
             renumber();
           }
           updateStats();
@@ -865,14 +879,9 @@
       f.moreRow = row;
     }
 
-    /** 把没建完的行一次性同步建完（展开/加载更多前调用，罕见路径） */
-    function flushFill() {
-      cancelFill();
-      if (!session.stack.length) return;
-      session.budget = Infinity;
-      session.total = Infinity;
-      step();
-    }
+    /* （flushFill 已删除：它把 session.total 设成 Infinity 绕过总量闸门，
+        在后台续建未完成时点击折叠/展开会同步建完整棵树，20MB 直接假死。
+        现在展开改为「摘帧 + 重建 + scheduleFill 续跑」，见 toggleNode。） */
 
     /** 约下一帧继续建（setTimeout(0) 让浏览器先上屏、响应输入） */
     function scheduleFill() {

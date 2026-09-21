@@ -116,6 +116,66 @@ def main():
           return JSON.stringify({行数:rows.length, 已编号:cnt, 编号断档:bad, 最后行号:prev});
         })()""")))
 
+        print('\n[3b] 折叠再展开：子元素不得重复追加（回归用例）')
+        print('    ' + str(ev("""(function(){
+          var toggles=[].slice.call(document.querySelectorAll('.jf-toggle'));
+          var t=null, kids=null;
+          for(var i=0;i<toggles.length;i++){
+            var k=toggles[i].closest('.jf-row').nextElementSibling;
+            if(k && k.classList.contains('jf-children') &&
+               k.querySelectorAll('.jf-row').length>=3){ t=toggles[i]; kids=k; break; }
+          }
+          if(!t) return JSON.stringify({跳过:'找不到可折叠容器'});
+          var n1=kids.querySelectorAll('.jf-row').length;
+          t.click();                       // 折叠
+          t.click();                       // 再展开
+          var n2=kids.querySelectorAll('.jf-row').length;
+          t.click(); t.click();            // 第二轮
+          var n3=kids.querySelectorAll('.jf-row').length;
+          // 行号也要保持连续
+          var rows=kids.querySelectorAll('.jf-row'), prev=0, bad=0;
+          for(var i=0;i<rows.length;i++){
+            var g=rows[i].querySelector('.jf-no');
+            if(!g || g.classList.contains('jf-no-more')) continue;
+            var v=parseInt(g.textContent,10);
+            if(!isNaN(v)){ if(v!==prev+1) bad++; prev=v; }
+          }
+          return JSON.stringify({首轮:n1, 一轮后:n2, 两轮后:n3,
+                                 重复追加:(n2>n1||n3>n2), 行号断档:bad});
+        })()""")))
+        time.sleep(1.2)
+
+        print('\n[3c] 后台续建未完成时就折叠/展开（flushFill 移除后的保护用例）')
+        print('    ' + str(ev("""(function(){
+          window.__EDGE_JSON_FORMATTER__.setEditorText(window.__B__);
+          // 此刻分帧续建还没开始跑（setTimeout(0)），立即连点折叠/展开
+          var toggles=[].slice.call(document.querySelectorAll('.jf-toggle'));
+          var t=null, kids=null;
+          for(var i=0;i<toggles.length;i++){
+            var k=toggles[i].closest('.jf-row').nextElementSibling;
+            if(k && k.classList.contains('jf-children') &&
+               k.querySelectorAll('.jf-row').length>=3){ t=toggles[i]; kids=k; break; }
+          }
+          if(!t) return JSON.stringify({跳过:'找不到可折叠容器'});
+          var n0=kids.querySelectorAll('.jf-row').length;
+          t.click(); t.click(); t.click(); t.click();   // 折叠/展开两轮
+          var n1=kids.querySelectorAll('.jf-row').length;
+          return JSON.stringify({续建中行数:n0, 连点后行数:n1, 重复追加:n1>n0});
+        })()""")))
+        time.sleep(4)
+        print('    ' + str(ev("""(function(){
+          var rows=document.querySelectorAll('.jf-row'), prev=0, bad=0, cnt=0, blank=0;
+          for(var i=0;i<rows.length;i++){
+            var g=rows[i].querySelector('.jf-no');
+            if(!g || g.classList.contains('jf-no-more')) continue;
+            var v=parseInt(g.textContent,10);
+            if(!isNaN(v)){ cnt++; if(v!==prev+1) bad++; prev=v; }
+            else if(g.textContent==='') blank++;
+          }
+          return JSON.stringify({稳定后行数:rows.length, 已编号:cnt,
+                                 编号断档:bad, 空行号:blank, 最后行号:prev});
+        })()""")))
+
         print('\n[4] 压缩 / 美化切换（纯 CSS，DOM 不重建）')
         print('    ' + str(ev("""(function(){
           var btns=[].slice.call(document.querySelectorAll('.jf-btn'));

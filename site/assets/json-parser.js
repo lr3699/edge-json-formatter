@@ -426,8 +426,9 @@
   var ARRAY_PROTO = Array.prototype;
   var HAS_OWN = Object.prototype.hasOwnProperty;
 
-  /** 本次惰性解析的会话：节点计数器 + 默认展开态 + 已物化容器清单 */
-  var LZ = null;
+  /* 会话（uid 计数器 / 默认展开态 / 已物化容器清单）不用模块级变量存：
+     它跟着每个节点的 __sess 走。否则连续两次 parse 后再去物化前一棵树
+     （比如旧 DOM 的折叠闭包还活着），uid/展开态/容器清单会串进新会话。 */
 
   /** 惰性节点共享原型：raw / entries / items 都在这里按需生成 */
   var LAZY_PROTO = null;
@@ -465,27 +466,28 @@
   }
 
   /** 原生值 → 惰性节点。只包一层，不递归：这就是「不建整棵树」的落点 */
-  function lazyNode(v, depth, keyNode, parent, indexInParent) {
+  function lazyNode(v, depth, keyNode, parent, indexInParent, s) {
     var type = v === null ? 'null'
       : Array.isArray(v) ? 'array'
         : typeof v === 'object' ? 'object'
           : typeof v;                       // string / number / boolean
     var isC = type === 'object' || type === 'array';
     var o = Object.create(lazyProto());
-    o.id = LZ.uid++;
+    o.id = s.uid++;
     o.type = type;
     o.value = isC ? undefined : v;
     o.depth = depth;
     o.start = -1;
     o.end = -1;
-    o.expanded = isC && LZ.deflt;
+    o.expanded = isC && s.deflt;
     o.keyNode = keyNode || null;
     o.parent = parent || null;
     o.path = '';
     o.indexInParent = indexInParent || 0;
     o.__n = isC ? v : undefined;
     o.__kid = null;
-    if (isC) LZ.nodes.push(o);              // 供 setAllExpanded 用，避免全树行走
+    o.__sess = s;                           // 会话随节点走，物化子节点时取用
+    if (isC) s.nodes.push(o);               // 供 setAllExpanded 用，避免全树行走
     return o;
   }
 
@@ -501,6 +503,7 @@
    */
   function lazyKids(node) {
     var native = node.__n;
+    var s = node.__sess;
     var isArr = node.type === 'array';
     var keys = isArr ? null : Object.keys(native);
     var len = isArr ? native.length : keys.length;
@@ -513,13 +516,13 @@
       // 语义必须与手写解析器一致：对象的 entries[i] 是 {keyNode, value} 键值对，
       // 数组的 items[i] 就是子节点本身。
       if (isArr) {
-        c = lazyNode(native[i], node.depth + 1, null, node, i);
+        c = lazyNode(native[i], node.depth + 1, null, node, i, s);
       } else {
         var kn = keyNodes[i] ||
-          (keyNodes[i] = lazyNode(keys[i], node.depth + 1, null, node, i));
+          (keyNodes[i] = lazyNode(keys[i], node.depth + 1, null, node, i, s));
         c = {
           keyNode: kn,
-          value: lazyNode(native[keys[i]], node.depth + 1, kn, node, i)
+          value: lazyNode(native[keys[i]], node.depth + 1, kn, node, i, s)
         };
       }
       kids[i] = c;
@@ -644,11 +647,8 @@
 
   /** 开一次惰性会话并包出根节点。O(1)：不递归、不预建任何子节点 */
   function buildFromNative(native, expanded) {
-    LZ = { uid: 0, deflt: expanded === true, nodes: [] };
-    var root = lazyNode(native, 0, null, null, 0);
-    root.__sess = LZ;                       // 供 setAllExpanded 走快捷路径
-    LZ.root = root;
-    return root;
+    var sess = { uid: 0, deflt: expanded === true, nodes: [] };
+    return lazyNode(native, 0, null, null, 0, sess);
   }
 
   /**
