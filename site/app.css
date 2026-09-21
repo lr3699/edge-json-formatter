@@ -1,0 +1,230 @@
+/* 网页版（site/app.html）附加样式：站点导航 + 设置抽屉。
+   颜色全部复用 editor.css 的 token，保证深浅主题与整页一致。 */
+
+/* ------------------------------------------------------------ 站点导航 */
+
+.sitenav {
+  position: relative;
+  z-index: 4;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 20px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.sitenav-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.sitenav-brand svg { width: 20px; height: 20px; color: var(--brand); }
+
+.sitenav-links {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 13px;
+}
+
+.sitenav-links a {
+  color: var(--muted);
+  text-decoration: none;
+  padding-bottom: 2px;
+  border-bottom: 2px solid transparent;
+}
+
+.sitenav-links a:hover { color: var(--text); }
+
+.sitenav-links a.active {
+  color: var(--brand);
+  border-bottom-color: var(--brand);
+}
+
+.welcome-note {
+  margin-top: 18px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------ 设置抽屉 */
+
+.drawer-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(8, 11, 16, .38);
+  backdrop-filter: blur(2px);
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 21;
+  width: 360px;
+  max-width: 92vw;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 18px 20px 28px;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.drawer-head b { font-size: 15px; }
+
+.drawer-body { padding: 6px 0 4px; }
+
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.set-label {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.set-select {
+  flex: 0 0 auto;
+  min-width: 108px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.set-select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+/* 开关 */
+.set-switch { position: relative; flex: 0 0 auto; display: inline-block; width: 40px; height: 22px; }
+
+.set-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+
+.set-switch-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background .16s ease;
+  pointer-events: none;
+}
+
+.set-switch-track::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
+  transition: transform .16s ease;
+}
+
+.set-switch input:checked + .set-switch-track { background: var(--brand); }
+
+.set-switch input:checked + .set-switch-track::after { transform: translateX(18px); }
+
+.set-switch input:focus-visible + .set-switch-track {
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+/* 抽屉里的 URL / 分享区块 */
+.drawer-block {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.drawer-block h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.drawer-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.drawer-row { display: flex; gap: 8px; }
+
+.drawer-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.drawer-row input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.btn-solid {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.btn-solid:hover { filter: brightness(1.06); }
+
+/* ------------------------------------------------------------ 窄屏 */
+
+@media (max-width: 720px) {
+  .sitenav { padding: 8px 12px; }
+  .sitenav-links { gap: 12px; font-size: 12px; }
+  .keys { display: none; }
+}
+
+@media (max-width: 560px) {
+  .sitenav-links a:not(.active) { display: none; }
+}

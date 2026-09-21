@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>在线 JSON 格式化 · JSON Duo</title>
+  <meta name="description" content="免费在线 JSON 格式化工具：左边粘贴、右边实时渲染成可折叠的语法高亮树。支持搜索、JSONPath 复制、转义保留/还原、深浅主题、大整数精度不丢失，全程在本地浏览器完成，不上传任何数据。">
+  <meta name="keywords" content="JSON 格式化,JSON 在线格式化,JSON 美化,JSON 查看器,JSON 校验,JSON formatter,JSON viewer,JSON pretty print">
+  <link rel="canonical" href="https://lr3699.github.io/json-formatter-pro/app.html">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="在线 JSON 格式化 · JSON Duo">
+  <meta property="og:description" content="双栏 JSON 工作台：左栏粘贴原文、右栏实时预览，可折叠树、搜索、JSONPath 复制，纯本地运行。">
+  <meta property="og:image" content="https://lr3699.github.io/json-formatter-pro/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="favicon.png" type="image/png">
+  <link rel="stylesheet" href="assets/editor.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <nav class="sitenav">
+    <a class="sitenav-brand" href="index.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M10 3.5H8.2A2.2 2.2 0 0 0 6 5.7v2.6A2.2 2.2 0 0 1 3.8 10.5 2.2 2.2 0 0 1 6 12.7v2.6A2.2 2.2 0 0 0 8.2 17.5H10"/>
+        <path d="M14 3.5h1.8A2.2 2.2 0 0 1 18 5.7v2.6a2.2 2.2 0 0 0 2.2 2.2A2.2 2.2 0 0 0 18 12.7v2.6a2.2 2.2 0 0 1-2.2 2.2H14"/>
+      </svg>
+      <span>JSON Duo</span>
+    </a>
+    <span class="sitenav-links">
+      <a href="index.html">功能介绍</a>
+      <a href="app.html" class="active">在线格式化</a>
+      <a href="privacy.html">隐私政策</a>
+      <a href="https://github.com/lr3699/edge-json-formatter" target="_blank" rel="noopener">GitHub</a>
+    </span>
+  </nav>
+
+  <div class="aurora" aria-hidden="true">
+    <span class="blob blob-a"></span>
+    <span class="blob blob-b"></span>
+    <span class="blob blob-c"></span>
+  </div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M9 4H7.5A2.5 2.5 0 0 0 5 6.5v3A2.5 2.5 0 0 1 2.5 12 2.5 2.5 0 0 1 5 14.5v3A2.5 2.5 0 0 0 7.5 20H9"/>
+          <path d="M15 4h1.5A2.5 2.5 0 0 1 19 6.5v3A2.5 2.5 0 0 0 21.5 12 2.5 2.5 0 0 0 19 14.5v3A2.5 2.5 0 0 1 16.5 20H15"/>
+        </svg>
+      </span>
+      <span class="brand-text">
+        <b>JSON Duo</b>
+        <em>粘贴即格式化 · 在线免安装</em>
+      </span>
+    </div>
+    <div class="topbar-tools">
+      <span id="keys" class="keys">
+        <kbd>Ctrl</kbd><i>+</i><kbd>Enter</kbd><i>立即格式化</i>
+        <em class="keys-sep">·</em>
+        <kbd>F</kbd><i>全屏</i>
+      </span>
+      <button id="btnFullscreen" class="btn btn-ghost" type="button"
+              aria-pressed="false" title="全屏查看（F）">
+        <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
+          <path d="M16 3h3a2 2 0 0 1 2 2v3"/>
+          <path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+          <path d="M8 21H5a2 2 0 0 1-2-2v-3"/>
+        </svg>
+        <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M9 4v3a2 2 0 0 1-2 2H4"/>
+          <path d="M15 4v3a2 2 0 0 0 2 2h3"/>
+          <path d="M15 20v-3a2 2 0 0 1 2-2h3"/>
+          <path d="M9 20v-3a2 2 0 0 0-2-2H4"/>
+        </svg>
+        <span id="fsLabel">全屏</span>
+      </button>
+      <button id="btnOptions" class="btn btn-ghost" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        <span>设置</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="workspace" id="workspace">
+    <section class="panel panel-input" id="panelInput">
+      <header class="panel-head">
+        <span class="panel-title">
+          <span class="dot-i dot-in"></span>输入
+        </span>
+        <span class="panel-tools">
+          <button id="btnSample" class="btn btn-sm" type="button">示例</button>
+          <button id="btnClear" class="btn btn-sm" type="button">清空</button>
+        </span>
+      </header>
+      <div class="editor-wrap">
+        <textarea id="input" spellcheck="false" autocomplete="off" autocapitalize="off"
+                  placeholder="把 JSON 粘贴到这里…&#10;&#10;· Ctrl+V / ⌘V 直接粘贴&#10;· 或把 .json / .txt 文件拖进来&#10;· 支持带注释、单引号、尾随逗号的宽松写法"></textarea>
+        <div id="rawView" class="raw-view" hidden>
+          <div id="rawSizer" class="raw-sizer"></div>
+          <div id="rawContent" class="raw-content"></div>
+        </div>
+      </div>
+      <footer class="panel-foot">
+        <span id="stats" class="muted">0 字符</span>
+        <span class="muted" id="fileInfo"></span>
+      </footer>
+    </section>
+
+    <div class="splitter" id="splitter" role="separator" aria-orientation="vertical"
+         tabindex="0" title="拖动调整左右宽度（双击恢复默认）">
+      <span class="splitter-grip"></span>
+    </div>
+
+    <section class="panel panel-output" id="panelOutput">
+      <div id="viewer" class="viewer-host" hidden></div>
+      <div id="welcome" class="welcome">
+        <div class="welcome-art">
+          <svg viewBox="0 0 120 96" fill="none" aria-hidden="true">
+            <rect x="10" y="14" width="100" height="68" rx="10"
+                  stroke="currentColor" stroke-width="2" opacity=".35"/>
+            <path d="M22 34h18M22 46h34M22 58h26" stroke="currentColor" stroke-width="2.4"
+                  stroke-linecap="round" opacity=".55"/>
+            <path d="M74 32l8 8-8 8" stroke="currentColor" stroke-width="2.4"
+                  stroke-linecap="round" stroke-linejoin="round" opacity=".8"/>
+            <circle cx="60" cy="76" r="3" fill="currentColor" opacity=".5"/>
+          </svg>
+        </div>
+        <h2>等待粘贴</h2>
+        <p>左侧贴入一段 JSON，这里会实时渲染成可折叠、带语法高亮的树。</p>
+        <ul class="welcome-list">
+          <li>解析失败会标出行号、列号与出错位置</li>
+          <li>大整数按原文保留，精度不丢失</li>
+          <li>可搜索、可折叠、可复制路径、可导出</li>
+        </ul>
+        <p class="welcome-note">全程在你自己的浏览器里完成，内容不上传、不落服务器。</p>
+      </div>
+      <footer class="panel-foot panel-foot-output">
+        <span id="statusPill" class="pill">
+          <span class="pill-dot"></span><span id="pillText">就绪</span>
+        </span>
+        <span id="msg" class="msg"></span>
+      </footer>
+    </section>
+  </main>
+
+  <div id="drawerMask" class="drawer-mask" hidden></div>
+  <aside id="drawer" class="drawer" hidden aria-label="设置">
+    <header class="drawer-head">
+      <b>设置</b>
+      <button id="drawerClose" class="btn btn-sm" type="button">关闭</button>
+    </header>
+    <div id="drawerBody" class="drawer-body"></div>
+    <section class="drawer-block">
+      <h3>从 URL 加载</h3>
+      <p class="drawer-hint">
+        直接抓一个接口地址并格式化。注意：多数接口不允许跨域访问（CORS），
+        取不到时把响应文本粘贴到左边即可。
+      </p>
+      <div class="drawer-row">
+        <input id="urlInput" type="url" placeholder="https://api.example.com/data.json" spellcheck="false">
+        <button id="btnUrlGo" class="btn btn-sm btn-solid" type="button">加载</button>
+      </div>
+    </section>
+    <section class="drawer-block">
+      <h3>分享这段 JSON</h3>
+      <p class="drawer-hint">把当前内容编进链接，打开即还原（超过 200 KB 不适用）。</p>
+      <button id="btnShare" class="btn btn-sm" type="button">复制分享链接</button>
+    </section>
+  </aside>
+
+  <script src="assets/defaults.js"></script>
+  <script src="assets/web-storage.js"></script>
+  <script src="assets/json-parser.js"></script>
+  <script src="assets/viewer.js"></script>
+  <script src="assets/editor.js"></script>
+  <script src="assets/web-settings.js"></script>
+</body>
+</html>

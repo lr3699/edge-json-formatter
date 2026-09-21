@@ -253,3 +253,12 @@ h2 {
   .top .wrap { height: 56px; }
   .top nav { gap: 14px; font-size: 13.5px; }
 }
+
+a.nav-cta {
+  color: #fff;
+  background: var(--primary);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+nav a.nav-cta:hover { color: #fff; background: var(--primary-hover); text-decoration: none; }

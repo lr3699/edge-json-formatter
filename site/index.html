@@ -19,7 +19,8 @@
         <span>JSON Duo</span>
       </a>
       <nav>
-        <a href="index.html" class="active">功能介绍</a>
+        <a href="index.html">功能介绍</a>
+        <a href="app.html" class="nav-cta">在线格式化</a>
         <a href="privacy.html">隐私政策</a>
       </nav>
     </div>
@@ -29,20 +30,26 @@
     <div class="hero">
       <h1>把一坨挤在一起的 JSON<br>变成能逐层展开的树</h1>
       <p class="lead">
-        专为 Microsoft Edge 设计的 JSON 查看器。打开接口地址即自动格式化，语法高亮、可折叠、
-        可复制路径、可一键复制或下载 —— 并且不会弄丢你的大整数。
+        左栏粘贴原文、右栏实时预览，语法高亮、可折叠、可复制路径、可一键复制或下载 ——
+        并且不会弄丢你的大整数。<strong>在线版免安装，打开即用</strong>；装了 Edge 扩展还能自动美化网页里的 JSON。
       </p>
       <div class="cta">
-        <a class="btn btn-solid" href="#" id="install">
+        <a class="btn btn-solid" href="app.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12.5l4.5 4.5L19 7.5"/>
+          </svg>
+          在线使用 · 免安装
+        </a>
+        <a class="btn btn-ghost" href="#" id="install">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 3.5v12"/><path d="m7.5 11 4.5 4.5 4.5-4.5"/><path d="M4.5 20.5h15"/>
           </svg>
           安装到 Edge
         </a>
-        <a class="btn btn-ghost" href="../preview/demo.html">查看界面预览</a>
       </div>
-      <p class="hint">安装后无需任何配置，访问 JSON 接口即刻生效。</p>
+      <p class="hint">在线版所有处理都在你自己的浏览器里完成，内容不上传；扩展版审核通过后，访问 JSON 接口即刻自动格式化。</p>
     </div>
 
     <section>
@@ -140,7 +147,7 @@
     } else {
       btn.addEventListener('click', function (e) {
         e.preventDefault();
-        alert('扩展正在提交 Microsoft Edge 加载项商店审核。\n审核通过前，可先用「查看界面预览」体验效果。');
+        alert('扩展正在提交 Microsoft Edge 加载项商店审核。\n审核通过前，可直接使用本页顶部的「在线格式化」，功能完整、免安装。');
       });
     }
   </script>
