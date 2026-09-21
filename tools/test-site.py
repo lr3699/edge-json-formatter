@@ -147,6 +147,34 @@ def main(argv=None):
         errs = errs or "[]"
         check("无 JS 报错", errs == "[]", errs[:200])
 
+        # 资源零 404：本地站点走 assets/<buildId>/ 内容哈希路径，路径拼错只会静默失效，
+        # 所以逐个请求一遍 DOM 里声明的脚本/样式，拿真实 HTTP 状态码断言。
+        # 注：CDP 的 evaluate 不开 awaitPromise，这里用同步 XHR 取状态码。
+        res = client.evaluate(
+            "(function(){"
+            "var urls=[];"
+            "document.querySelectorAll('script[src]').forEach(function(s){urls.push(s.src);});"
+            "document.querySelectorAll('link[rel=stylesheet][href]').forEach(function(l){urls.push(l.href);});"
+            "var bad=[];"
+            "for(var i=0;i<urls.length;i++){"
+            "  try{var x=new XMLHttpRequest();"
+            "    x.open('GET',urls[i],false);"
+            "    x.send(null);"
+            "    if(x.status<200||x.status>=400) bad.push(x.status+' '+urls[i]);"
+            "  }catch(e){bad.push('ERR '+urls[i]+' '+e);}"
+            "}"
+            "return JSON.stringify({total:urls.length,bad:bad});"
+            "})()"
+        ).get("value")
+        import json as _json2
+        try:
+            info = _json2.loads(res)
+        except Exception:
+            info = {"total": 0, "bad": ["无法解析:" + str(res)[:120]]}
+        check("资源零 404", not info["bad"] and info["total"] >= 5,
+              "共 %s 个资源%s" % (info["total"],
+                                "" if not info["bad"] else "，坏链 -> " + "; ".join(info["bad"])[:220]))
+
         if args.shot:
             client.screenshot(args.shot)
             print("  截图:", args.shot)

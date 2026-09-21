@@ -3,6 +3,47 @@
 > 依据 Microsoft 官方文档《Publish a Microsoft Edge extension》整理（2026-09 核对）。
 > 参考：https://learn.microsoft.com/microsoft-edge/extensions/publish/publish-extension
 
+## v1.1.5 更新：性能 + 折叠修复（**已提交，2026-09-21 18:4x，In review**）
+
+走了完整 Update 流程，全程走接口判定可用性（没信 UI 的按钮状态）。
+
+| 项 | 值 |
+| --- | --- |
+| 新提交 ID | `1152921505701941995`（`InReview`） |
+| 版本 | **1.1.5** |
+| 上一版（仍在售） | 1.1.4，提交 ID `1152921505701939427`，状态 `InExtensionStore` |
+| 上传包 | `dist/json-duo-1.1.5.zip`（92.3 KB，24 个文件） |
+| 认证说明 | 复用 `tools/fill-certification-1.1.4.json`（1847 字符，未自创文案） |
+| tester 凭据 | **No**（`#testerInfoNo`，默认是 Yes，必须改） |
+| Store ID / CRX ID | `0RDCK9ZTJXV2` ／ `lckjaaoekeleokmdnjjfagoohghjflcn` |
+
+### 本次流程（可复用）
+
+1. **先问接口再动手**：`overview/submissions` 显示只有 1.1.4 一条 `InExtensionStore`，
+   没有 `InReview` 也没有 `draftsubmission` ⇒ **没有提交占着审核通道，可以发新版**。
+2. 概览页点 `v6_he-button | Update` → 生成草稿并跳到 `.../packages`。
+3. `tools/cdp_upload.py --index 0 dist/json-duo-1.1.5.zip` 上传。
+   **`detected: []` + `ok: false` 是假阴性**（Angular 重建了 input），
+   以 `submissiondetails/draftsubmission` 的 `extensionVersion` 为准 —— 本次读回 `1.1.5` + `PackageValid`。
+4. 左侧 6 步材料全部从 1.1.4 继承（都是绿勾）。逐个点 `Save & Continue`
+   推进 Availability → Properties → Privacy → Listings（listings 页没有 Save & Continue）。
+5. listings 页点 `Publish` → 跳 `/submission`（tester 凭据 + 认证说明页）。
+6. `pc_fill.py tools/fill-certification-1.1.4.json` 填 `#testerInfoNo` + 认证说明 →
+   点 `#publishButton`。
+7. **验收看接口**：`overview/submissions` 出现新 ID + `InReview`，旧版仍 `InExtensionStore`。
+
+> **踩坑**：
+> 1. 点完 Publish **页面不一定跳回 `packages/dashboard`**（本次停在 `/submission`，
+>    渲染成一个空白 overview）。**不要据此判断失败**，去问 `overview/submissions`。
+> 2. `check-store-publish.py <CRX_ID>` 本次返回 **404**，但 Partner Center 明确显示
+>    1.1.4 是 `InExtensionStore`、卡片里 `storeUrlReady: true`。
+>    说明该商店接口有滞后/例外，**单看它会误判**；与 Partner Center 冲突时以后者为准。
+> 3. MV3 的 service worker 空闲会被回收，`/json/list` 里就没有那条 target，
+>    扩展 ID 直接用「未打包目录路径的 UTF-16LE 做 SHA-256 取前 16 字节、逐 nibble 映射 a..p」反推，
+>    不依赖 SW 存活。
+
+---
+
 ## v1.1.3 更新：更名「JSON Duo」+ 中文化（**已提交，2026-09-20 22:5x，In review**）
 
 **改名 + 中文描述**，走了完整的 Update 更新流程。
