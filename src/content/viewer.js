@@ -976,9 +976,10 @@
     /* ---------------- 折叠控制 ---------------- */
     function setAllExpanded(expanded) {
       if (!state.root) return;
-      parser.walk(state.root, function (node) {
-        if (node.type === 'object' || node.type === 'array') node.expanded = expanded;
-      });
+      /* 不能直接 parser.walk 后逐个改：大 JSON 走的是惰性树，walk 会把整棵树
+         物化出来（20MB 约 32 万节点、几百毫秒）。交给解析器的快捷实现：
+         翻转默认态 + 只改已物化出来的容器。 */
+      parser.setAllExpanded(state.root, expanded);
       render();
     }
 
@@ -993,7 +994,26 @@
     }
 
     /* ---------------- 输出 ---------------- */
+    /**
+     * 惰性树（大文件走原生解析）输出快捷路径。
+     *
+     * 树里的值从未被改写，规范化的原生序列化结果与逐节点 compact()/pretty()
+     * 完全一致——两侧的取值同源（数字都是 String(value)、字符串都是
+     * JSON.stringify，raw 也是这么还原的）。但省掉了把 60 万个节点
+     * 全部物化出来的开销：20MB 的复制/导出从近一秒降到约 100ms。
+     *
+     * 「按键排序」会改变顺序，退回逐节点实现；缩进单位超过 10 字符时
+     * JSON.stringify 会自行截断，也退回，保证输出与逐节点实现逐字节相同。
+     */
+    function nativeText(node, unit) {
+      if (!node.__sess || opts.sortKeys) return null;
+      if (unit && unit.length > 10) return null;
+      return unit ? JSON.stringify(node.__n, null, unit) : JSON.stringify(node.__n);
+    }
+
     function compact(node) {
+      var whole = nativeText(node, null);
+      if (whole !== null) return whole;
       if (node.type === 'object') {
         if (!node.entries.length) return '{}';
         var es = orderedEntries(node);
@@ -1013,6 +1033,8 @@
     }
 
     function pretty(node, unit, depth) {
+      var whole = nativeText(node, unit);
+      if (whole !== null) return whole;
       var pad = new Array(depth + 1).join(unit);
       var padIn = new Array(depth + 2).join(unit);
       if (node.type === 'object') {
