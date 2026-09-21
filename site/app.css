@@ -2,30 +2,66 @@
    颜色全部复用 editor.css 的 token，保证深浅主题与整页一致。 */
 
 /* ------------------------------------------------------------ 顶部导航
-   并入 .topbar（见 app.html）：brand 左、导航链接右（margin-left:auto），
-   之后才是工具按钮区。不再有独立的站点导航行。 */
+   并入 .topbar（见 app.html），三区布局：
+   brand（左） · topnav（中，靠 .topbar 的 space-between 居中） · 工具区（右）。
+   链接用药丸样式与工具按钮区分；工具区左侧加竖分隔线。 */
 
 .topnav {
   display: flex;
   align-items: center;
-  gap: 18px;
-  margin-left: auto;
+  gap: 4px;
   font-size: 13px;
+  min-width: 0;
 }
 
 .topnav a {
   color: var(--muted);
   text-decoration: none;
-  padding-bottom: 2px;
-  border-bottom: 2px solid transparent;
+  padding: 5px 11px;
+  border-radius: 999px;
   white-space: nowrap;
+  transition: background .15s ease, color .15s ease;
 }
 
-.topnav a:hover { color: var(--text); }
+.topnav a:hover {
+  color: var(--text);
+  background: var(--topnav-hover, rgba(16, 24, 40, .06));
+}
 
 .topnav a.active {
   color: var(--brand);
-  border-bottom-color: var(--brand);
+  background: var(--topnav-active, rgba(47, 174, 82, .12));
+  font-weight: 600;
+}
+
+/* GitHub 是外链，加个小箭头示意 */
+.topnav a[target="_blank"]::after {
+  content: "↗";
+  font-size: 10px;
+  margin-left: 2px;
+  opacity: .55;
+}
+
+/* 主题变量：跟随系统 + 支持手动切换（与 editor.css 的 data-theme 机制一致） */
+html[data-theme="dark"] {
+  --topnav-hover: rgba(255, 255, 255, .08);
+  --topnav-active: rgba(47, 174, 82, .16);
+}
+html[data-theme="light"] {
+  --topnav-hover: rgba(16, 24, 40, .06);
+  --topnav-active: rgba(47, 174, 82, .12);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) {
+    --topnav-hover: rgba(255, 255, 255, .08);
+    --topnav-active: rgba(47, 174, 82, .16);
+  }
+}
+
+/* 工具区与站点导航之间加一条竖分隔线，划清「站点导航」与「应用工具」 */
+.topbar-tools {
+  padding-left: 16px;
+  border-left: 1px solid var(--border-soft);
 }
 
 .welcome-note {
@@ -205,11 +241,23 @@
 
 /* ------------------------------------------------------------ 窄屏 */
 
-@media (max-width: 720px) {
-  .topnav { gap: 12px; font-size: 12px; }
+@media (max-width: 1180px) {
+  /* 导航占了中栏，标语先让位 */
+  .brand-text em { display: none; }
+  .brand-text b { white-space: nowrap; }
+}
+
+@media (max-width: 1024px) {
   .keys { display: none; }
+}
+
+@media (max-width: 720px) {
+  .topnav { gap: 2px; font-size: 12px; }
+  .topnav a { padding: 4px 8px; }
+  .topbar-tools { padding-left: 10px; }
 }
 
 @media (max-width: 560px) {
   .topnav a:not(.active) { display: none; }
+  .topbar-tools { border-left: 0; padding-left: 0; }
 }
