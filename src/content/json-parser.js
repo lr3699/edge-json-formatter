@@ -76,43 +76,46 @@
     function readString(depth) {
       var start = i;
       i++; // 开引号
-      var out = '';
-      // 性能要点：必须先 indexOf 定位结束引号，再在「引号界定的一段」里找反斜杠。
+      // 性能要点一：必须先 indexOf 定位结束引号，再在「引号界定的一段」里找反斜杠。
       // 旧版先在全文上 indexOf('\\', i) 找转义——文档里只要没有任何反斜杠，
       // 这个查找每次都要扫到文档末尾，几十万个短字符串就是 O(n²)，大 JSON 直接卡死。
+      // 性能要点二：结果必须用数组分片 + 最后一次性 join。旧版 out += 每遇一个
+      // 转义就把已累积的整个字符串重新拷贝一遍——一段含十几万个 \uXXXX 的
+      // 大字符串就是 O(n²)（约几十 GB 的内存搬运），主线程直接卡死几十秒。
+      var parts = [];
       while (true) {
         var q = text.indexOf('"', i);
         if (q === -1) fail('字符串缺少结束引号', start);
         var run = text.slice(i, q); // 本次结束引号之前的整段
         var s = run.indexOf('\\');
         if (s === -1) {
-          // 无转义：整段一次拼接，字符串结束
+          // 无转义：整段一次入队，字符串结束
           var nl = run.search(/[\n\r]/);
           if (nl !== -1) fail('字符串中不能出现未转义的换行', i + nl);
-          out += run;
+          parts.push(run);
           i = q + 1;
           break;
         }
-        // 段内含转义：先拼无转义前段，再按旧逻辑处理转义符
+        // 段内含转义：先入队无转义前段，再按转义符逐个处理
         if (s > 0) {
           var nl2 = run.slice(0, s).search(/[\n\r]/);
           if (nl2 !== -1) fail('字符串中不能出现未转义的换行', i + nl2);
-          out += run.slice(0, s);
+          parts.push(run.slice(0, s));
         }
         var bs = i + s; // 反斜杠绝对位置
         var e = text[bs + 1];
         switch (e) {
           case '"': case '\\': case '/':
-            out += e; i = bs + 2; break;
-          case 'b': out += '\b'; i = bs + 2; break;
-          case 'f': out += '\f'; i = bs + 2; break;
-          case 'n': out += '\n'; i = bs + 2; break;
-          case 'r': out += '\r'; i = bs + 2; break;
-          case 't': out += '\t'; i = bs + 2; break;
+            parts.push(e); i = bs + 2; break;
+          case 'b': parts.push('\b'); i = bs + 2; break;
+          case 'f': parts.push('\f'); i = bs + 2; break;
+          case 'n': parts.push('\n'); i = bs + 2; break;
+          case 'r': parts.push('\r'); i = bs + 2; break;
+          case 't': parts.push('\t'); i = bs + 2; break;
           case 'u': {
             var hex = text.substr(bs + 2, 4);
             if (!/^[0-9a-fA-F]{4}$/.test(hex)) fail('无效的 \\u 转义序列', bs);
-            out += String.fromCharCode(parseInt(hex, 16));
+            parts.push(String.fromCharCode(parseInt(hex, 16)));
             i = bs + 6;
             break;
           }
@@ -121,7 +124,7 @@
             fail('无效的转义字符 “\\' + e + '”', bs);
         }
       }
-      return prim('string', out, start, i, depth);
+      return prim('string', parts.join(''), start, i, depth);
     }
 
     function readNumber(depth) {

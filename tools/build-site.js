@@ -45,6 +45,11 @@ const HOOKS = [
   '    inputKind = "drop";',
   '    formatNow();',
   '  };',
+  '',
+  '  /** 读取当前输入源文本（大文本模式下 textarea 被隐藏，必须走这里） */',
+  '  NS.getEditorText = function () {',
+  '    return sourceText;',
+  '  };',
   ''
 ].join('\n');
 

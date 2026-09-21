@@ -85,6 +85,37 @@
           <span class="dot-i dot-in"></span>输入
         </span>
         <span class="panel-tools">
+          <button id="btnUniToggle" class="btn btn-sm" type="button"
+                  title="中文 ⇄ \uXXXX 自动识别方向：内容含 \u 转义则还原成中文，否则把中文转成 \uXXXX">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="2" y1="12" x2="22" y2="12"/>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+            <span>中文⇄U</span>
+          </button>
+          <button id="btnEscToggle" class="btn btn-sm" type="button"
+                  title="转义 ⇄ 还原 自动识别方向：整段是带引号的转义字符串则还原，否则转义成 JSON 字符串">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="16 18 22 12 16 6"/>
+              <polyline points="8 6 2 12 8 18"/>
+            </svg>
+            <span>转义⇄还原</span>
+          </button>
+          <button id="btnMinify" class="btn btn-sm" type="button"
+                  title="压缩：去掉多余空白与注释（单遍扫描，大整数精度不丢）">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="4 14 10 14 10 20"/>
+              <polyline points="20 10 14 10 14 4"/>
+              <line x1="14" y1="10" x2="21" y2="3"/>
+              <line x1="3" y1="21" x2="10" y2="14"/>
+            </svg>
+            <span>压缩</span>
+          </button>
+          <span class="tools-sep"></span>
           <button id="btnSample" class="btn btn-sm" type="button">示例</button>
           <button id="btnClear" class="btn btn-sm" type="button">清空</button>
         </span>

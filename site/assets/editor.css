@@ -386,6 +386,23 @@ kbd {
 
 .panel-tools { display: inline-flex; gap: 7px; }
 
+/* ------------------------------------------------------------ 输入转换按钮
+   三枚图标+文字的双向转换按钮（中文⇄U / 转义⇄还原 / 压缩），
+   竖线分隔符与「示例/清空」隔开。窄面板允许换行，不挤爆标题行。 */
+
+.panel-tools {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: 4px;
+}
+
+.tools-sep {
+  align-self: stretch;
+  width: 1px;
+  margin: 2px 1px;
+  background: var(--border-soft);
+}
+
 .panel-foot {
   flex: 0 0 auto;
   display: flex;

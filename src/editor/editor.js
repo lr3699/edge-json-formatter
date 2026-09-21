@@ -453,6 +453,159 @@
     btnOptions.hidden = true;
   }
 
+  /* ---------------- 输入转换工具（转换 ▾ 菜单） ----------------
+   * 五个功能全部是 O(n) 单遍处理，不做 JSON.parse / stringify 整棵树
+   * （压缩尤其如此：直接对原文做空白/注释剥离，大整数精度原样保留，
+   * 宽松写法——单引号、注释、尾随逗号——也不会出错）。
+   * 结果统一走 setInputText：大文本自动切虚拟原文视图，不卡 textarea。
+   */
+
+  // 中文（所有非 ASCII 可见字符）→ \uXXXX。单遍正则替换，原生实现最快。
+  function toUnicode(text) {
+    return text.replace(/[\u0080-\uFFFF]/g, function (ch) {
+      var code = ch.charCodeAt(0).toString(16);
+      while (code.length < 4) code = '0' + code;
+      return '\\u' + code;
+    });
+  }
+
+  // \uXXXX → 原字符。代理对（emoji 等）由 fromCharCode 自然拼回。
+  function fromUnicode(text) {
+    return text.replace(/\\u([0-9a-fA-F]{4})/g, function (m, hex) {
+      return String.fromCharCode(parseInt(hex, 16));
+    });
+  }
+
+  // 转义：整段文本变成一个带引号的 JSON 字符串（native stringify，O(n)）
+  function escapeJson(text) {
+    return JSON.stringify(text);
+  }
+
+  // 去除转义：剥掉一层 JSON 字符串包装。失败返回 null（调用方提示）。
+  function unescapeJson(text) {
+    var t = text.replace(/^\uFEFF/, '').trim();
+    if (!t) return null;
+    // 标准形态：整体就是一个带引号的 JSON 字符串
+    try {
+      var v = JSON.parse(t);
+      if (typeof v === 'string') return v;
+    } catch (e) { /* 落到下面的兜底 */ }
+    // 兜底：用户手动删过外层引号，内容还是 \" 转义形态 → 补一对引号再解
+    if (/^[\[{]/.test(t)) return null; // 看着就是未转义的 JSON，没有可去的转义
+    try {
+      var v2 = JSON.parse('"' + t + '"');
+      if (typeof v2 === 'string') return v2;
+    } catch (e2) { /* 忽略 */ }
+    return null;
+  }
+
+  // 压缩：单遍扫描，字符串原样保留（不解析内容），剥掉字符串外的空白与注释。
+  // 相比 JSON.parse+stringify 的优势：大整数精度不丢、宽松写法不报错、更快。
+  function minifyJsonText(src) {
+    var n = src.length;
+    var parts = [];
+    var i = 0;
+    var start = 0; // 当前未消费块的起点
+    while (i < n) {
+      var ch = src.charCodeAt(i);
+      if (ch === 34 /* " */ || ch === 39 /* ' */) {
+        // 字符串整体拷贝（宽松写法支持单引号），内部空白不动
+        var j = i + 1;
+        while (j < n) {
+          var c = src.charCodeAt(j);
+          if (c === 92 /* \ */) { j += 2; continue; }
+          if (c === ch) { j++; break; }
+          j++;
+        }
+        if (start < i) parts.push(src.slice(start, i));
+        parts.push(src.slice(i, j));
+        i = start = j;
+        continue;
+      }
+      if (ch === 47 /* / */) {
+        var nx = src.charCodeAt(i + 1);
+        if (nx === 47) { // 行注释 → 一个空格占位
+          var k = src.indexOf('\n', i);
+          if (k < 0) k = n;
+          if (start < i) parts.push(src.slice(start, i));
+          parts.push(' ');
+          i = start = k;
+          continue;
+        }
+        if (nx === 42) { // 块注释 → 一个空格占位
+          var k2 = src.indexOf('*/', i + 2);
+          k2 = k2 < 0 ? n : k2 + 2;
+          if (start < i) parts.push(src.slice(start, i));
+          parts.push(' ');
+          i = start = k2;
+          continue;
+        }
+      }
+      if (ch === 32 || ch === 9 || ch === 10 || ch === 13) { // 空白
+        if (start < i) parts.push(src.slice(start, i));
+        i++;
+        start = i;
+        continue;
+      }
+      i++;
+    }
+    if (start < n) parts.push(src.slice(start, n));
+    return parts.join('');
+  }
+
+  var XFORMS = {
+    toUnicode:   { fn: toUnicode,   label: '中文转 Unicode' },
+    fromUnicode: { fn: fromUnicode, label: 'Unicode 转中文' },
+    escape:      { fn: escapeJson,  label: '转义' },
+    unescape:    { fn: unescapeJson, label: '去除转义' },
+    minify:      { fn: minifyJsonText, label: '压缩' }
+  };
+
+  function applyXform(kind) {
+    var spec = XFORMS[kind];
+    if (!spec) return;
+    var text = sourceText;
+    if (!text) { setMessage('输入为空，没有可转换的内容', 'err'); return; }
+    var t0 = performance.now ? performance.now() : Date.now();
+    var out;
+    try {
+      out = spec.fn(text);
+    } catch (err) {
+      setMessage(spec.label + '失败：' + err.message, 'err');
+      return;
+    }
+    if (out == null) {
+      setMessage(spec.label + '：内容不是转义后的 JSON 字符串，无转义可去', 'err');
+      return;
+    }
+    if (out === text) {
+      setMessage(spec.label + '：转换后内容未变化', 'ok');
+      return;
+    }
+    setInputText(out);
+    inputKind = 'drop'; // 视作整块替换，右侧播放动效
+    var ms = Math.round((performance.now ? performance.now() : Date.now()) - t0);
+    formatNow();
+    setMessage(spec.label + '完成 · ' + formatBytes(out.length) + ' · ' + ms + 'ms', 'ok');
+  }
+
+  /* 两枚双向按钮：方向自动识别 */
+  var btnUniToggle = $('btnUniToggle');
+  if (btnUniToggle) btnUniToggle.addEventListener('click', function () {
+    // 检测到 \u 转义 → 还原成中文；否则 → 转成 \uXXXX
+    applyXform(/\\u[0-9a-fA-F]{4}/.test(sourceText) ? 'fromUnicode' : 'toUnicode');
+  });
+  var btnEscToggle = $('btnEscToggle');
+  if (btnEscToggle) btnEscToggle.addEventListener('click', function () {
+    // 整段以引号开头 → 还原；否则 → 转义
+    var t = (sourceText || '').replace(/^\uFEFF/, '').trim();
+    applyXform(t.charAt(0) === '"' ? 'unescape' : 'escape');
+  });
+  var btnMinify = $('btnMinify');
+  if (btnMinify) btnMinify.addEventListener('click', function () {
+    applyXform('minify');
+  });
+
   /* ---------------- 可拖动分隔条 ---------------- */
 
   var SPLIT_KEY = 'jfEditorSplitPercent';
