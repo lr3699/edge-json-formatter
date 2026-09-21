@@ -37,9 +37,17 @@
 
   --blob-opacity: .5;
 
+  /* 等宽栈末尾必须显式列出中文字体：前面的 Cascadia Mono / Consolas /
+     Courier New 都没有汉字，一旦不列，Chromium 走 monospace 的 CJK 兜底，
+     Windows 上会落到 NSimSun（点阵宋体）——中文又细又虚就出在这里。
+     拉丁字符仍走最前面的等宽字体，代码对齐不受影响；汉字交给雅黑渲染。 */
   --mono: "Cascadia Mono", Consolas, ui-monospace, SFMono-Regular, Menlo,
-          "Liberation Mono", "Courier New", monospace;
-  --ui: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+          "Liberation Mono", "Courier New",
+          "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",
+          "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC",
+          "WenQuanYi Micro Hei", monospace;
+  --ui: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei UI",
+        "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
 
   --radius: 14px;
   --split: 36%;
@@ -113,6 +121,13 @@ body {
   color: var(--text);
   font: 13.5px/1.5 var(--ui);
   -webkit-font-smoothing: auto;
+}
+
+/* macOS 深色主题下改用灰阶抗锯齿：默认平滑会把浅色字渲染得偏重、边缘发糊。
+   仅限 macOS——Windows 的 ClearType 比灰阶更利落，改了反而显细。 */
+html.is-mac[data-theme="dark"] body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* ------------------------------------------------------- 极光背景（装饰） */
@@ -525,7 +540,11 @@ kbd {
   padding: 14px 16px;
   background: var(--panel);
   color: var(--text);
-  font: 500 14.5px/1.7 var(--mono);
+  /* 字重 400 + 整数 24px 行高：中文无衬线体（雅黑/PingFang）只为屏幕优化了
+     400 / 700 两档，中间字重会被合成加粗把笔画糊掉；行高用整数 px 才能让
+     每一行都落在整设备像素上。24px 同时也是 .raw-line 的行高，两种输入模式
+     （textarea / 虚拟滚动）的行距完全一致，切换时不会跳。 */
+  font: 400 14px/24px var(--mono);
   tab-size: 2;
   white-space: pre;
   overflow: auto;
@@ -548,7 +567,7 @@ kbd {
   overflow: auto;
   background: var(--panel);
   color: var(--text);
-  font: 500 14px/24px var(--mono);
+  font: 400 14px/24px var(--mono);
   tab-size: 2;
   contain: layout paint;
 }
@@ -582,6 +601,11 @@ kbd {
 .raw-tx {
   flex: 1 1 auto;
   white-space: pre;
+}
+.raw-hint {
+  color: var(--muted);
+  opacity: .6;
+  user-select: none;
 }
 .raw-view[hidden] { display: none; }
 

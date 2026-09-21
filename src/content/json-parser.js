@@ -38,7 +38,7 @@
     return c >= '0' && c <= '9';
   }
 
-  function parseStrict(text) {
+  function parseStrict(text, meta, defaultExpanded) {
     var i = text.charCodeAt(0) === 0xfeff ? 1 : 0;
     var n = text.length;
 
@@ -55,6 +55,12 @@
     }
 
     function prim(type, value, start, end, depth) {
+      /* 节点数与最大深度在解析途中顺手累加，容器 expanded 一次定好。
+         以前是解析完再 stats() + setAllExpanded() 两趟全树遍历，对 11MB
+         文档是百万级函数调用，白跑。这里把三件事合并进 O(1) 的节点构造。 */
+      meta.count++;
+      if (depth > meta.depth) meta.depth = depth;
+      var isContainer = (type === 'object' || type === 'array');
       return {
         id: uid++,
         type: type,
@@ -65,7 +71,7 @@
         depth: depth,
         entries: null,
         items: null,
-        expanded: false,
+        expanded: isContainer && defaultExpanded === true,
         keyNode: null,
         parent: null,
         path: '',
@@ -379,18 +385,32 @@
    * 解析 JSON 文本。
    * @param {string} text
    * @param {{lenient?: boolean}} [options]
-   * @returns {{root: object, lenient: boolean}}
+   * @returns {{root: object, lenient: boolean, count: number, depth: number}}
+   *          count / depth 由解析过程顺手统计，调用方不必再遍历一次树。
    */
   function parse(text, options) {
     options = options || {};
     if (typeof text !== 'string') text = String(text);
+    var expanded = options.defaultExpanded !== false; // 默认展开（与查看器既有行为一致）
+    var meta = { count: 0, depth: 0 };
     try {
-      return { root: parseStrict(text), lenient: false };
+      return {
+        root: parseStrict(text, meta, expanded),
+        lenient: false,
+        count: meta.count,
+        depth: meta.depth
+      };
     } catch (err) {
       if (!options.lenient) throw err;
       var relaxedText = relax(text);
+      var meta2 = { count: 0, depth: 0 };
       try {
-        return { root: parseStrict(relaxedText), lenient: true };
+        return {
+          root: parseStrict(relaxedText, meta2, expanded),
+          lenient: true,
+          count: meta2.count,
+          depth: meta2.depth
+        };
       } catch (err2) {
         throw err; // 报原始错误，信息更有意义
       }

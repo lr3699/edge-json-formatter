@@ -83,9 +83,11 @@ def main(argv=None):
         print("  当前 .jf-row 数量：%s" % rows0, flush=True)
 
         # 点压缩：按钮文案是「目标动作」语义——pretty 模式显示「美化」（点后变压缩）
+        # 作用域必须限定在查看器工具栏内：输入面板上也有一个文案为「压缩」的
+        # 转换按钮（那是对源文本做压缩，不是切输出排版），不限定会点错按钮。
         t0 = time.time()
         client.evaluate(
-            "(function(){var bs=[].slice.call(document.querySelectorAll('button'));"
+            "(function(){var bs=[].slice.call(document.querySelectorAll('.jf-toolbar button'));"
             "var b=bs.filter(function(x){return x.textContent.trim()==='美化';})[0];"
             "if(b)b.click();})()"
         )
@@ -99,10 +101,10 @@ def main(argv=None):
         print("  切到压缩：%.0f ms（rows %s -> %s，compact class=%s）"
               % (compact_ms, rows0, rows_compact, is_compact), flush=True)
 
-        # 点美化（切回）：compact 模式下按钮文案是「压缩」
+        # 点美化（切回）：compact 模式下按钮文案是「压缩」（同样限定工具栏内）
         t0 = time.time()
         client.evaluate(
-            "(function(){var bs=[].slice.call(document.querySelectorAll('button'));"
+            "(function(){var bs=[].slice.call(document.querySelectorAll('.jf-toolbar button'));"
             "var b=bs.filter(function(x){return x.textContent.trim()==='压缩';})[0];"
             "if(b)b.click();})()"
         )

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>中文字体清晰度对照</title>
+<style>
+  body { margin: 0; padding: 20px 22px; background: #f4f6f9; width: 1140px;
+         font: 13px/1.5 system-ui, "Microsoft YaHei UI", "Microsoft YaHei", sans-serif; color: #1b1f24; }
+  h1 { margin: 0 0 16px; font-size: 16px; }
+  .block { background: #fff; border: 1px solid #dde2e8; border-radius: 10px;
+           padding: 12px 14px 14px; margin-bottom: 14px; }
+  h2 { margin: 0 0 3px; font-size: 13.5px; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11.5px;
+         font-weight: 600; margin-right: 7px; vertical-align: 1px; }
+  .old .tag { background: #fde8e8; color: #b42318; }
+  .new .tag { background: #e6f6ec; color: #1f7a3d; }
+  .sub { margin: 0 0 9px; color: #6b7280; font-size: 12px; }
+  /* 2 倍像素放大：把真实屏幕像素显示出来，不做平滑，避免插值掩盖差异 */
+  img { display: block; width: 750px; image-rendering: pixelated; border-radius: 6px; }
+  .clip { overflow: hidden; border-radius: 6px; background: #fff; }
+</style>
+</head>
+<body>
+  <h1>格式化输出区 · 中文渲染对照（Windows · 125% 缩放，设备像素 2 倍放大）</h1>
+
+  <div class="block old">
+    <h2><span class="tag">修改前</span>NSimSun（点阵宋体）· 15px · 字重 500</h2>
+    <p class="sub">字体栈里没有中文字体，中文只能走 monospace 兜底 → 笔画细、边缘发虚</p>
+    <div class="clip"><img src="crop-before.png" alt="before"></div>
+  </div>
+
+  <div class="block new">
+    <h2><span class="tag">修改后</span>Microsoft YaHei UI（微软雅黑）· 14px · 字重 400</h2>
+    <p class="sub">中文字体显式进栈，拉丁字符仍走 Cascadia Mono；整数行高，禁用合成字重</p>
+    <div class="clip"><img src="crop-after.png" alt="after"></div>
+  </div>
+</body>
+</html>

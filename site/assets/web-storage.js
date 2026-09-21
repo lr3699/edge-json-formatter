@@ -33,6 +33,22 @@
     return Promise.resolve();
   };
 
+  /**
+   * 一次性迁移（uiVersion）。
+   * 这一版把默认字号从 15 调成了 14（15 在 125% 缩放的屏上偏大，还挤掉可读行数）。
+   * 老访客的 localStorage 里存着 15——那是「旧的默认值」，不迁移的话改默认也白改。
+   * 只在「存的正好是旧默认 15」且没有迁移标记时才抹掉，用户手动选过的其它值不动。
+   */
+  var UI_VERSION = 2;
+  (function migrate() {
+    var all = readAll();
+    if (all.uiVersion === UI_VERSION) return;
+    if (all.fontSize === 15) delete all.fontSize;
+    if (all.lineNumbers === false) delete all.lineNumbers; // 行号默认关闭 → 交回默认
+    all.uiVersion = UI_VERSION;
+    try { localStorage.setItem(KEY, JSON.stringify(all)); } catch (e) { /* 同上 */ }
+  })();
+
   // 扩展里用于「打开独立编辑页」，网页版不存在这个概念
   NS.openEditor = function openEditor() { /* no-op */ };
 })();

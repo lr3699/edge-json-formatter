@@ -26,14 +26,33 @@
    * 字体栈。
    * 把 Windows 自带的 Cascadia Mono / Consolas 提到最前：这两个字形比
    * `ui-monospace` 兜底命中的字体饱满，13~15px 下不会显得笔画很「瘦」。
+   *
+   * 末尾那串中文字体是**必须显式列出**的，不能只靠 generic monospace 兜底：
+   * Cascadia Mono / Consolas / Courier New 全都没有汉字，不列中文时 Chromium
+   * 会走 `monospace` 的 CJK 兜底，而 Windows 上这个兜底恰好落到 NSimSun
+   * （新宋体，点阵宋体系）——15px 下中文就是又细又虚的宋体轮廓，这正是
+   * 「格式化后中文模糊看不清」的根因（已用 CSS.getPlatformFontsForNode 实测确认）。
+   * 列出中文字体后：拉丁字符仍走最前面的等宽字体（代码对齐不受影响），
+   * 汉字由第一个命中的中文字体渲染。微软雅黑 / PingFang / Noto Sans SC
+   * 都是为屏幕阅读设计的无衬线体，笔画实、hinting 好，同字号下清晰得多。
    */
   var MONO_FONT = '"Cascadia Mono",Consolas,ui-monospace,SFMono-Regular,"SF Mono",' +
-                  'Menlo,"Liberation Mono","Courier New",monospace';
+                  'Menlo,"Liberation Mono","Courier New",' +
+                  '"Microsoft YaHei UI","Microsoft YaHei","PingFang SC","Hiragino Sans GB",' +
+                  '"Noto Sans SC","Source Han Sans SC","WenQuanYi Micro Hei",sans-serif';
   /** 取消「等宽字体」时使用：同字号下观感更大、笔画更实 */
-  var PROSE_FONT = 'system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif';
+  var PROSE_FONT = 'system-ui,-apple-system,"Segoe UI","Microsoft YaHei UI",' +
+                   '"Microsoft YaHei","PingFang SC","Noto Sans SC",sans-serif';
 
-  /** 正文字号兜底值（px），与 defaults.js 的 fontSize 保持一致 */
-  var DEFAULT_FONT_SIZE = 15;
+  /**
+   * 正文字号兜底值（px），与 defaults.js 的 fontSize 保持一致。
+   * 14px 是「不显大、又够清晰」的平衡点：再小（≤13px）中文在 Windows 上
+   * 笔画会挤在一起，再大则一屏能看的行数明显减少。
+   */
+  var DEFAULT_FONT_SIZE = 14;
+
+  /** 正文行高 = round(字号 × 1.7)，在 applyFont 里按实际字号算成整数 px */
+  var LINE_RATIO = 1.7;
 
   /**
    * 分批渲染上限（大 JSON 卡死修复）：
@@ -52,6 +71,7 @@
     '.jf-root{all:initial;}',
     '.jf-root{',
     '  --jf-indent:' + INDENT_PX + 'px;',
+    '  --jf-lh:' + Math.round(DEFAULT_FONT_SIZE * LINE_RATIO) + 'px;',
     '  --jf-bg:#ffffff;',
     '  --jf-bg-alt:#fafafa;',
     '  --jf-bg-hover:#f2f6fb;',
@@ -79,8 +99,13 @@
     '  position:relative;display:flex;flex-direction:column;height:100%;width:100%;',
     '  background:var(--jf-bg);color:var(--jf-text);',
     '  font-family:' + MONO_FONT + ';',
-    '  font-size:' + DEFAULT_FONT_SIZE + 'px;line-height:1.7;letter-spacing:normal;text-align:left;',
-    '  direction:ltr;font-weight:500;font-style:normal;text-transform:none;',
+    '  font-size:' + DEFAULT_FONT_SIZE + 'px;line-height:var(--jf-lh);letter-spacing:normal;text-align:left;',
+    /* font-weight 用 400：中文无衬线体（雅黑/PingFang）只为屏幕优化了 400 与 700
+       两档，请求 500 这类「中间字重」要么被映射掉、要么被合成加粗，合成加粗会把
+       笔画糊在一起——那正是「字很清楚但看着虚」的来源。400 是笔画最干净的一档。
+       font-synthesis-weight:none 再兜一道：任何情况下都不允许伪造字重。 */
+    '  direction:ltr;font-weight:400;font-style:normal;text-transform:none;',
+    '  font-synthesis-weight:none;',
     '  visibility:visible;opacity:1;overflow:hidden;',
     '}',
     '.jf-root[data-theme="dark"]{',
@@ -96,6 +121,10 @@
     '  --jf-shadow:0 12px 48px rgba(0,0,0,.55);',
     '}',
     '.jf-root *,.jf-root *::before,.jf-root *::after{box-sizing:border-box;}',
+    /* macOS 深色下用灰阶抗锯齿：浅色文字在深底上默认会显得偏重、发糊。
+       其它平台保持 auto，Windows 的 ClearType 比灰阶更清晰。 */
+    '.jf-root.is-mac[data-theme="dark"]{-webkit-font-smoothing:antialiased;',
+    '  -moz-osx-font-smoothing:grayscale;}',
 
     /* ---------------- 工具栏 ---------------- */
     '.jf-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:8px 12px;',
@@ -142,7 +171,10 @@
     '  border-radius:4px;padding:0 3px;}',
     '.jf-row:hover{background:var(--jf-bg-hover);}',
     '.jf-no{flex:0 0 auto;width:4em;padding-right:1.1em;text-align:right;color:var(--jf-muted);',
-    '  opacity:.55;user-select:none;font-size:.86em;line-height:2.03;background:var(--jf-bg);',
+    /* 行号用整数 px + 与正文同一个行高变量：行号不再是 .86em 这种小数尺寸
+       （14×.86 = 12.04px，落在分数设备像素上会发虚），也顺带修掉了行号
+       与正文行高不一致导致的逐行错位。 */
+    '  opacity:.6;user-select:none;font-size:12px;line-height:var(--jf-lh);background:var(--jf-bg);',
     '  position:relative;',
     '  /* 行号要钉在查看器最左侧。不能用负 margin：flex 里首项的负 margin 会把',
     '     后面的内容一起拖过去，正好抵消 .jf-children 的嵌套缩进，开了行号整棵树',
@@ -174,17 +206,20 @@
     '.jf-key{color:var(--jf-key);font-weight:600;cursor:pointer;border-radius:3px;}',
     '.jf-key:hover{background:var(--jf-key-bg,rgba(146,39,143,.09));}',
     '.jf-str{color:var(--jf-str);}',
+    '.jf-str-more{color:var(--jf-accent);cursor:pointer;font-style:italic;',
+    '  user-select:none;margin-left:4px;}',
+    '.jf-str-more:hover{text-decoration:underline;}',
     '.jf-num{color:var(--jf-num);}',
     '.jf-bool{color:var(--jf-bool);}',
     '.jf-null{color:var(--jf-null);font-style:italic;}',
     '.jf-punct{color:var(--jf-punct);}',
-    '.jf-summary{color:var(--jf-muted);font-style:italic;font-size:.92em;cursor:pointer;}',
+    '.jf-summary{color:var(--jf-muted);font-style:italic;font-size:13px;cursor:pointer;}',
     '.jf-summary:hover{color:var(--jf-accent);}',
 
     /* ---------------- 状态栏 ---------------- */
     '.jf-status{flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:6px 24px 6px 14px;',
     '  border-top:1px solid var(--jf-border);background:var(--jf-bg-alt);',
-    '  font-size:11.5px;color:var(--jf-muted);overflow:hidden;}',
+    '  font-size:12px;color:var(--jf-muted);overflow:hidden;}',
     '.jf-status > span:last-child{flex:0 0 auto;white-space:nowrap;}',
     '.jf-path{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;}',
     '.jf-path:hover{color:var(--jf-accent);}',
@@ -201,7 +236,8 @@
     /* ---------------- 错误卡片 ---------------- */
     '.jf-error{margin:16px 0;padding:18px 20px;border:1px solid var(--jf-border);',
     '  border-left:3px solid #e85050;border-radius:10px;background:var(--jf-bg-alt);max-width:860px;',
-    '  font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;}',
+    '  font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei UI","Microsoft YaHei",' +
+    '"PingFang SC","Noto Sans SC",sans-serif;}',
     '.jf-error h3{margin:0 0 10px;font-size:14px;color:#e85050;font-weight:700;}',
     '.jf-error p{margin:0 0 10px;font-size:13px;color:var(--jf-text);line-height:1.7;}',
     '.jf-error pre{margin:0 0 10px;padding:12px 14px;background:var(--jf-bg);',
@@ -311,6 +347,13 @@
 
     rootEl.classList.add('jf-root');
     if (opts.overlay) rootEl.classList.add('jf-overlay');
+    /* macOS 深色主题下默认的字体平滑会把浅色文字渲染得偏重、边缘发糊，
+       CSS 里对 .is-mac[data-theme="dark"] 降级成灰阶抗锯齿。
+       只给 macOS 加这个类：Windows/Linux 上 ClearType 渲染本来就利落，
+       改成灰阶抗锯齿反而会让笔画变细。 */
+    if (/Mac/i.test((navigator.platform || '') + ' ' + (navigator.userAgent || ''))) {
+      rootEl.classList.add('is-mac');
+    }
     applyTheme();
     applyFont();
     installStyles(rootEl);
@@ -448,6 +491,9 @@
       var size = parseInt(opts.fontSize, 10);
       if (!size || size < 8) size = DEFAULT_FONT_SIZE;
       rootEl.style.fontSize = size + 'px';
+      // 行高跟着字号走，但取整成 px：小数行高会让每一行的基线落在分数设备
+      // 像素上，整段文字读起来就是「发虚」。14px 字号 → 24px 行高。
+      rootEl.style.setProperty('--jf-lh', Math.round(size * LINE_RATIO) + 'px');
       // 取消「等宽字体」时换成正文字体栈：同字号下字形更大、笔画更实
       rootEl.style.fontFamily = opts.monoFont === false ? PROSE_FONT : MONO_FONT;
     }
@@ -467,6 +513,67 @@
         return opts.keepEscape ? node.raw : '"' + escapeForDisplay(node.value) + '"';
       }
       return node.raw;
+    }
+
+    /**
+     * 超长字符串值：默认折叠 + 惰性展开，绝不一次性渲染全文。
+     *
+     * 这是「压缩 / 转义后大 JSON 卡死」的根因修复：压缩 / 转义后的内容往往
+     * 是一个几 MB 的字符串值，如果一次性渲染全文（无论单个节点还是切成几千
+     * 块），浏览器 shaping/layout 都会假死。正确做法是「惰性展开」：
+     *  - 默认只渲染前 STRING_PREVIEW 字符，末尾挂「… (N 字符) 点击展开」；
+     *  - 用户点「展开」才把全文分片渲染出来（块大小足够大，节点数可控）；
+     *  - 展开后点「收起」再折叠回预览。
+     * 这样转义 12MB 文本时，初始只产生 1 个文本节点 + 1 个折叠标记，
+     * 主线程零阻塞。
+     */
+    var STRING_PREVIEW = 1024;
+    var STRING_CHUNK = 8192;
+    function appendValueText(container, node) {
+      var text = valueText(node);
+      if (text.length <= STRING_PREVIEW) {
+        container.appendChild(document.createTextNode(text));
+        return;
+      }
+
+      // 折叠态：预览 + 展开标记
+      var preview = el('span', 'jf-str-trunc');
+      preview.appendChild(document.createTextNode(text.slice(0, STRING_PREVIEW)));
+      var more = el('span', 'jf-str-more');
+      more.textContent = '… (' + text.length.toLocaleString('zh-CN') + ' 字符，点击展开)';
+      more.title = '点击展开完整内容';
+      preview.appendChild(more);
+      container.appendChild(preview);
+
+      var expanded = false;
+      var expandToggle = function () {
+        expanded = !expanded;
+        if (expanded) {
+          // 惰性展开：全文分片渲染（块够大，节点数可控）
+          preview.textContent = '';
+          for (var i = 0; i < text.length; i += STRING_CHUNK) {
+            preview.appendChild(document.createTextNode(text.slice(i, i + STRING_CHUNK)));
+          }
+          var less = el('span', 'jf-str-more');
+          less.textContent = ' … (点击收起)';
+          preview.appendChild(less);
+        } else {
+          // 收起：回到预览态
+          preview.textContent = '';
+          preview.appendChild(document.createTextNode(text.slice(0, STRING_PREVIEW)));
+          var m2 = el('span', 'jf-str-more');
+          m2.textContent = '… (' + text.length.toLocaleString('zh-CN') + ' 字符，点击展开)';
+          m2.title = '点击展开完整内容';
+          preview.appendChild(m2);
+        }
+      };
+      more.addEventListener('click', function (e) { e.stopPropagation(); expandToggle(); });
+      preview.addEventListener('click', function (e) {
+        // 点击「收起」标记时折叠
+        if (expanded && e.target.classList && e.target.classList.contains('jf-str-more')) {
+          e.stopPropagation(); expandToggle();
+        }
+      });
     }
 
     function nodeValueClass(node) {
@@ -605,7 +712,7 @@
         rowContent.appendChild(el('span', 'jf-punct', node.type === 'object' ? '{}' : '[]'));
       } else {
         var v = el('span', nodeValueClass(node));
-        v.textContent = valueText(node);
+        appendValueText(v, node);
         v.title = '点击复制值';
         v.style.cursor = 'pointer';
         v.addEventListener('click', function () { doCopy(valueText(node), '已复制值'); });
@@ -725,7 +832,7 @@
           state.root = res.root;
           state.lenient = true;
           state.error = null;
-          afterParse();
+          afterParse(res);
         } catch (e) {
           toast('宽松解析仍然失败');
         }
@@ -918,11 +1025,19 @@
         ' · 源码 ' + formatBytes(state.text.length) + outPart;
     }
 
-    function afterParse() {
-      state.stats = parser.stats(state.root);
-      // 默认全展开：渲染本身是分片的（RENDER_BUDGET / MAX_CHUNK），
-      // 超大 JSON 也只会先渲染可视范围内的一批，其余走「加载更多」
-      setAllExpanded(true);
+    function afterParse(res) {
+      /* 解析器在解析途中就统计好节点数/深度，并把「默认展开」一次定好，
+         所以这里不再 stats() + setAllExpanded() 两趟全树遍历。
+         11MB 文档有上百万个节点，那两趟遍历是每次格式化都要付的固定成本。
+         res.count 缺失时才回退到老路径（兼容外部只替换了部分文件的场景）。
+         注意：老路径的 setAllExpanded 内部会顺带 render()，新路径必须显式 render。 */
+      if (res && typeof res.count === 'number') {
+        state.stats = { count: res.count, depth: res.depth };
+        render();
+      } else {
+        state.stats = parser.stats(state.root);
+        setAllExpanded(true);
+      }
       setPath('');
     }
 
@@ -946,7 +1061,7 @@
         return false;
       }
       // 渲染阶段的异常不应被误报为 JSON 语法错误
-      afterParse();
+      afterParse(res);
       return true;
     }
 

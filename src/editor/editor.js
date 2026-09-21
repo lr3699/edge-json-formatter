@@ -152,6 +152,33 @@
     return s;
   }
 
+  /**
+   * 原文片段 → span，按「水平窗口」切分。
+   *
+   * 背景：压缩 / 转义后，整个文档是一行几 MB 的超长文本。如果整行塞进一个
+   * 文本节点，浏览器的文本 shaping 是超线性成本直接假死；如果按 512 字符无脑
+   * 切块，12MB 会切出 2 万多个 DOM 节点，反而更慢（那次就是切太碎翻车的）。
+   * 正确做法是「窗口化」：只渲染 scrollLeft 附近一段（左右各留 RAW_WINDOW
+   * 字符缓冲），两侧用省略号占位提示，滚动时重渲染窗口。DOM 节点数恒定，
+   * 与行有多长无关。
+   */
+  var RAW_WINDOW = 4000;
+  var rawScrollLeft = 0;
+
+  function rawTextSpan(text) {
+    var span = el('span', 'raw-tx');
+    if (text.length <= RAW_WINDOW * 2) {
+      span.textContent = text;               // 短行：整行一个节点
+      return span;
+    }
+    var start = Math.max(0, rawScrollLeft - RAW_WINDOW);
+    var end = Math.min(text.length, start + RAW_WINDOW * 2);
+    if (start > 0) span.appendChild(el('span', 'raw-hint', '…'));
+    span.appendChild(document.createTextNode(text.slice(start, end)));
+    if (end < text.length) span.appendChild(el('span', 'raw-hint', '…'));
+    return span;
+  }
+
   /** 载入大文本：建行索引 + 渲染可视区。行索引用 indexOf 逐行推进，O(行数) 而非逐字符。 */
   function showRawView() {
     rawLineOffsets = buildLineIndex(sourceText);
@@ -176,13 +203,14 @@
     var visible = Math.ceil(viewportH / RAW_LINE_H);
     var end = Math.min(rawLineCount, start + visible + 60);
 
+    rawScrollLeft = rawViewEl.scrollLeft;
     rawContentEl.style.transform = 'translateY(' + (start * RAW_LINE_H) + 'px)';
     var digits = String(rawLineCount).length;
     var frag = document.createDocumentFragment();
     for (var i = start; i < end; i++) {
       var line = el('div', 'raw-line');
       line.appendChild(el('span', 'raw-ln', padLeft(i + 1, digits)));
-      line.appendChild(el('span', 'raw-tx', rawLineText(i)));
+      line.appendChild(rawTextSpan(rawLineText(i)));
       frag.appendChild(line);
     }
     rawContentEl.textContent = '';
@@ -499,58 +527,63 @@
     return null;
   }
 
+  /** Uint16Array 前 len 个码元 → 字符串。分块 fromCharCode，避免超长参数列表爆栈 */
+  function charCodesToString(buf, len) {
+    var CHUNK = 8192;
+    var out = [];
+    for (var i = 0; i < len; i += CHUNK) {
+      var end = Math.min(i + CHUNK, len);
+      out.push(String.fromCharCode.apply(null, buf.subarray(i, end)));
+    }
+    return out.join('');
+  }
+
   // 压缩：单遍扫描，字符串原样保留（不解析内容），剥掉字符串外的空白与注释。
   // 相比 JSON.parse+stringify 的优势：大整数精度不丢、宽松写法不报错、更快。
+  //
+  // 性能要点：输出一定不长于输入（只删字符），所以一次性分配 Uint16Array 当写指针，
+  // 比旧实现「push 上百万个分片再 join」快得多——11MB 美化过的 JSON 里空白成片出现，
+  // 旧写法会攒出上百万个 JS 小字符串，光分配和 join 就要一两秒。
   function minifyJsonText(src) {
     var n = src.length;
-    var parts = [];
+    var buf = new Uint16Array(n);
+    var w = 0;
     var i = 0;
-    var start = 0; // 当前未消费块的起点
     while (i < n) {
-      var ch = src.charCodeAt(i);
-      if (ch === 34 /* " */ || ch === 39 /* ' */) {
-        // 字符串整体拷贝（宽松写法支持单引号），内部空白不动
+      var c = src.charCodeAt(i);
+      if (c === 34 /* " */ || c === 39 /* ' */) {
+        // 字符串整体搬运（宽松写法支持单引号），内部空白不动
         var j = i + 1;
         while (j < n) {
-          var c = src.charCodeAt(j);
-          if (c === 92 /* \ */) { j += 2; continue; }
-          if (c === ch) { j++; break; }
+          var cj = src.charCodeAt(j);
+          if (cj === 92 /* \ */) { j += 2; continue; }
           j++;
+          if (cj === c) break;
         }
-        if (start < i) parts.push(src.slice(start, i));
-        parts.push(src.slice(i, j));
-        i = start = j;
+        if (j > n) j = n;
+        while (i < j) buf[w++] = src.charCodeAt(i++);
         continue;
       }
-      if (ch === 47 /* / */) {
+      if (c === 47 /* / */) {
         var nx = src.charCodeAt(i + 1);
-        if (nx === 47) { // 行注释 → 一个空格占位
+        if (nx === 47) {                  // 行注释 → 一个空格占位
           var k = src.indexOf('\n', i);
-          if (k < 0) k = n;
-          if (start < i) parts.push(src.slice(start, i));
-          parts.push(' ');
-          i = start = k;
+          i = k < 0 ? n : k;
+          buf[w++] = 32;
           continue;
         }
-        if (nx === 42) { // 块注释 → 一个空格占位
+        if (nx === 42) {                  // 块注释 → 一个空格占位
           var k2 = src.indexOf('*/', i + 2);
-          k2 = k2 < 0 ? n : k2 + 2;
-          if (start < i) parts.push(src.slice(start, i));
-          parts.push(' ');
-          i = start = k2;
+          i = k2 < 0 ? n : k2 + 2;
+          buf[w++] = 32;
           continue;
         }
       }
-      if (ch === 32 || ch === 9 || ch === 10 || ch === 13) { // 空白
-        if (start < i) parts.push(src.slice(start, i));
-        i++;
-        start = i;
-        continue;
-      }
+      if (c === 32 || c === 9 || c === 10 || c === 13) { i++; continue; } // 空白
+      buf[w++] = c;
       i++;
     }
-    if (start < n) parts.push(src.slice(start, n));
-    return parts.join('');
+    return charCodesToString(buf, w);
   }
 
   var XFORMS = {
@@ -797,6 +830,12 @@
   }
 
   /* ---------------- 启动 ---------------- */
+
+  /* macOS 深色主题下默认字体平滑会把浅色字渲染得偏重发糊，挂个 html.is-mac
+     让 CSS 降级成灰阶抗锯齿；Windows/Linux 不加（ClearType 更清晰）。 */
+  if (/Mac/i.test((navigator.platform || '') + ' ' + (navigator.userAgent || ''))) {
+    document.documentElement.classList.add('is-mac');
+  }
 
   updateStats();
   showOutput(false);

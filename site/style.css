@@ -52,7 +52,9 @@ a { color: var(--num); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 code {
-  font-family: ui-monospace, SFMono-Regular, Consolas, Menlo, monospace;
+  font-family: ui-monospace, SFMono-Regular, Consolas, Menlo,
+               "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",
+               "Noto Sans SC", monospace;
   font-size: .9em;
   background: var(--key-soft);
   color: var(--key);

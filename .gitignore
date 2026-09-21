@@ -13,3 +13,6 @@ __pycache__/
 
 # 调试用 Edge 浏览器临时配置（browser-automation-cdp 启动时生成）
 .edge-profile/
+
+# 性能回归夹具（11MB 真实数据，只在本地用，不入库）
+tools/fixtures/
