@@ -150,8 +150,8 @@
     '.jf-btn-outline:hover:not([disabled]){background:var(--jf-ok-soft);',
     '  border-color:var(--jf-primary);color:var(--jf-primary);}',
     /* 工具栏主功能按钮：实心描边，视觉上与正文区分，凸显可点击 */
-    '.jf-btn-solid{height:32px;padding:0 13px;border:1px solid var(--jf-border-strong);',
-    '  border-radius:8px;background:var(--jf-bg);color:var(--jf-text);font-size:13px;font-weight:600;',
+    '.jf-btn-solid{height:30px;padding:0 12px;border:1px solid var(--jf-border-strong);',
+    '  border-radius:8px;background:var(--jf-bg);color:var(--jf-text);font-size:12.5px;font-weight:600;',
     '  box-shadow:0 1px 2px rgba(0,0,0,.06);}',
     '.jf-btn-solid:hover:not([disabled]){border-color:var(--jf-accent);',
     '  background:var(--jf-accent-soft);color:var(--jf-accent);}',
