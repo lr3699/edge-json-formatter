@@ -1,50 +1,29 @@
 /* 网页版（site/app.html）附加样式：站点导航 + 设置抽屉。
    颜色全部复用 editor.css 的 token，保证深浅主题与整页一致。 */
 
-/* ------------------------------------------------------------ 站点导航 */
+/* ------------------------------------------------------------ 顶部导航
+   并入 .topbar（见 app.html）：brand 左、导航链接右（margin-left:auto），
+   之后才是工具按钮区。不再有独立的站点导航行。 */
 
-.sitenav {
-  position: relative;
-  z-index: 4;
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 8px 20px;
-  background: var(--panel-2);
-  border-bottom: 1px solid var(--border-soft);
-}
-
-.sitenav-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  font-size: 13.5px;
-  color: var(--text);
-  text-decoration: none;
-}
-
-.sitenav-brand svg { width: 20px; height: 20px; color: var(--brand); }
-
-.sitenav-links {
+.topnav {
   display: flex;
   align-items: center;
   gap: 18px;
+  margin-left: auto;
   font-size: 13px;
 }
 
-.sitenav-links a {
+.topnav a {
   color: var(--muted);
   text-decoration: none;
   padding-bottom: 2px;
   border-bottom: 2px solid transparent;
+  white-space: nowrap;
 }
 
-.sitenav-links a:hover { color: var(--text); }
+.topnav a:hover { color: var(--text); }
 
-.sitenav-links a.active {
+.topnav a.active {
   color: var(--brand);
   border-bottom-color: var(--brand);
 }
@@ -227,11 +206,10 @@
 /* ------------------------------------------------------------ 窄屏 */
 
 @media (max-width: 720px) {
-  .sitenav { padding: 8px 12px; }
-  .sitenav-links { gap: 12px; font-size: 12px; }
+  .topnav { gap: 12px; font-size: 12px; }
   .keys { display: none; }
 }
 
 @media (max-width: 560px) {
-  .sitenav-links a:not(.active) { display: none; }
+  .topnav a:not(.active) { display: none; }
 }
