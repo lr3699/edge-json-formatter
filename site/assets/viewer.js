@@ -157,6 +157,13 @@
     '  margin-left:2px;}',
     '.jf-children-collapsed{display:none;}',
 
+    /* 压缩显示：不改动树形 DOM，只靠 CSS 把嵌套结构塌缩成单行。
+       大 JSON 点「压缩」时零节点重建，几十万节点也能瞬间切换。 */
+    '.jf-compact .jf-row{display:inline;padding:0;}',
+    '.jf-compact .jf-children{display:inline;padding-left:0;border-left:0;margin-left:0;}',
+    '.jf-compact .jf-no,.jf-compact .jf-toggle,.jf-compact .jf-summary{display:none;}',
+    '.jf-compact .jf-row:hover{background:none;}',
+
     /* 键与括号之间的圆角方框折叠标记 */
     '.jf-toggle{display:inline-flex;align-items:center;justify-content:center;',
     '  width:15px;height:15px;margin:0 3px;padding:0;border:0;background:none;',
@@ -376,7 +383,8 @@
         state.outMode = state.outMode === 'compact' ? 'pretty' : 'compact';
         outCache.key = null;   // 输出模式变了，序列化缓存失效
         syncToolbar();
-        render();              // 重渲染：压缩=单行扁平，美化=树形
+        // 只切 CSS class，不重建 DOM：大 JSON 几十万节点也能瞬间切换
+        body.classList.toggle('jf-compact', state.outMode === 'compact');
       }, 'btn-solid');
       toolbar.appendChild(tb.mode);
 
@@ -525,80 +533,14 @@
     }
 
     /**
-     * 压缩显示：把整棵树渲染成单行扁平文本（键 + 值 + 分隔符连续排列），
-     * 不折叠、不换行、无缩进。叶子节点（值）保留语法高亮与点击复制。
-     * 这是「压缩」按钮的可见效果——点下去，屏幕上的 JSON 真的收成一行。
+     * 压缩显示已改为纯 CSS 方案（body.jf-compact + .jf-compact 系列规则），
+     * 不再需要独立的渲染函数：树形 DOM 结构与美化模式完全一致，
+     * 只是用 CSS 把嵌套缩进/换行/折叠标记塌缩成单行。这样大 JSON 点「压缩」
+     * 只是切换一个 class，几十万节点零重建、零卡顿。
+     * （原 renderCompactNode / renderCompactChild 已删除）
      */
-    function renderCompactNode(parentEl, node, keyNode, isLast, depth) {
-      var row = makeRow(node, depth);
-      var content = el('span', 'jf-content');
-      if (keyNode) {
-        content.appendChild(makeKeySpan(keyNode, keyNode.value));
-        content.appendChild(el('span', 'jf-punct', ':'));
-      }
-      if (node.type === 'object' || node.type === 'array') {
-        var isObj = node.type === 'object';
-        content.appendChild(el('span', 'jf-punct', isObj ? '{' : '['));
-        var kids = isObj ? orderedEntries(node) : node.items;
-        for (var i = 0; i < kids.length; i++) {
-          if (i > 0) content.appendChild(el('span', 'jf-punct', ','));
-          if (isObj) {
-            renderCompactChild(content, kids[i].value, kids[i].keyNode, i === kids.length - 1, depth + 1);
-          } else {
-            renderCompactChild(content, kids[i], null, i === kids.length - 1, depth + 1);
-          }
-        }
-        content.appendChild(el('span', 'jf-punct', isObj ? '}' : ']'));
-      } else {
-        var v = el('span', nodeValueClass(node));
-        v.textContent = valueText(node);
-        v.title = '点击复制值';
-        v.style.cursor = 'pointer';
-        v.addEventListener('click', function () { doCopy(valueText(node), '已复制值'); });
-        content.appendChild(v);
-      }
-      if (!isLast) content.appendChild(el('span', 'jf-punct', ','));
-      row.appendChild(content);
-      parentEl.appendChild(row);
-    }
-
-    // 压缩模式下，子节点与父节点拼在同一行内，不单独建行
-    function renderCompactChild(parentContentEl, node, keyNode, isLast, depth) {
-      if (keyNode) {
-        parentContentEl.appendChild(makeKeySpan(keyNode, null));
-        parentContentEl.appendChild(el('span', 'jf-punct', ':'));
-      }
-      if (node.type === 'object' || node.type === 'array') {
-        var isObj = node.type === 'object';
-        parentContentEl.appendChild(el('span', 'jf-punct', isObj ? '{' : '['));
-        var kids = isObj ? orderedEntries(node) : node.items;
-        for (var i = 0; i < kids.length; i++) {
-          if (i > 0) parentContentEl.appendChild(el('span', 'jf-punct', ','));
-          if (isObj) {
-            renderCompactChild(parentContentEl, kids[i].value, kids[i].keyNode, i === kids.length - 1, depth + 1);
-          } else {
-            renderCompactChild(parentContentEl, kids[i], null, i === kids.length - 1, depth + 1);
-          }
-        }
-        parentContentEl.appendChild(el('span', 'jf-punct', isObj ? '}' : ']'));
-      } else {
-        var v = el('span', nodeValueClass(node));
-        v.textContent = valueText(node);
-        v.title = '点击复制值';
-        v.style.cursor = 'pointer';
-        v.addEventListener('click', function () { doCopy(valueText(node), '已复制值'); });
-        parentContentEl.appendChild(v);
-      }
-    }
-
     function renderNode(parentEl, node, keyNode, isLast, path, depth) {
       depth = depth || 0;
-      // 压缩模式：整棵树渲染成单行扁平文本（不折叠、不换行、无缩进引导线），
-      // 与「复制/下载」时输出的 compact 字符串保持同一份显示语义。
-      if (state.outMode === 'compact') {
-        renderCompactNode(parentEl, node, keyNode, isLast, depth);
-        return;
-      }
       var isContainer = node.type === 'object' || node.type === 'array';
       var childCount = isContainer
         ? (node.type === 'object' ? node.entries.length : node.items.length)
@@ -795,6 +737,8 @@
     function render() {
       body.textContent = '';
       body.scrollTop = 0;
+      // 压缩模式只靠 CSS class 切换排版（.jf-compact），不改变树形 DOM 结构
+      body.classList.toggle('jf-compact', state.outMode === 'compact');
       if (state.error) {
         renderError();
         updateStats();
