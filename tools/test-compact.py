@@ -62,6 +62,24 @@ def main(argv=None):
             fails.append(name)
         print("  [%s] %-26s %s" % ("PASS" if cond else "FAIL", name, extra))
 
+    def wait_settled(timeout=15.0, quiet=0.35):
+        """等渐进渲染收尾：行数连续 quiet 秒不再变化才认为稳定。
+
+        渲染改成分帧补齐后，.jf-row 数量会在载入后继续增长，
+        所以任何「对比前后行数」的断言都必须先等它稳定。"""
+        deadline = time.time() + timeout
+        last = -1
+        last_change = time.time()
+        while time.time() < deadline:
+            n = client.evaluate("document.querySelectorAll('.jf-row').length").get("value")
+            if n != last:
+                last = n
+                last_change = time.time()
+            elif time.time() - last_change >= quiet:
+                return n
+            time.sleep(0.1)
+        return last
+
     client = CDPClient(host="127.0.0.1", port=args.port, timeout=120)
     try:
         client.ensure_page()
@@ -77,10 +95,8 @@ def main(argv=None):
         )
         t1 = time.time()
         print("  载入 + 首屏渲染：%.0f ms" % ((t1 - t0) * 1000), flush=True)
-        time.sleep(1.0)
-
-        rows0 = client.evaluate("document.querySelectorAll('.jf-row').length").get("value")
-        print("  当前 .jf-row 数量：%s" % rows0, flush=True)
+        rows0 = wait_settled()
+        print("  当前 .jf-row 数量（渲染已稳定）：%s" % rows0, flush=True)
 
         # 点压缩：按钮文案是「目标动作」语义——pretty 模式显示「美化」（点后变压缩）
         # 作用域必须限定在查看器工具栏内：输入面板上也有一个文案为「压缩」的

@@ -342,7 +342,7 @@
     }
   }
 
-  function scheduleFormat() {
+  function scheduleFormat(fast) {
     updateStats();
     // 超大内容：同步给出「内容过大」提示，不要等 220ms 防抖的 setTimeout——
     // 那会被浏览器后续的重排推迟，用户看到的反馈就延迟了数秒。
@@ -357,11 +357,15 @@
     // 否则连续输入时 220ms 防抖会让面板反复亮灭（就是「窗口闪动」的来源之一）。
     setPill('is-busy', '解析中…');
     if (debounceTimer) clearTimeout(debounceTimer);
+    // fast=true（粘贴 / 拖入大文本）：防抖是给「连续打字」用的，
+    // 一次性灌进来的大文本不会再有后续输入，220ms 纯属白等。
+    // 用 setTimeout(0) 而不是同步调 format：先让浏览器把原文视图画出来，
+    // 用户立刻能看到内容进去，右侧树随后跟上。
     debounceTimer = setTimeout(function () {
       debounceTimer = null;
       format(false, inputKind !== 'typing');
       inputKind = 'typing';
-    }, DEBOUNCE_MS);
+    }, fast ? 0 : DEBOUNCE_MS);
   }
 
   function formatNow() {
@@ -393,7 +397,7 @@
     e.preventDefault();                 // 阻止浏览器把大文本塞进 textarea
     setInputText(text);
     inputKind = 'paste';
-    scheduleFormat();
+    scheduleFormat(true);               // 大文本粘贴不需要防抖，立即格式化
   });
 
   // 虚拟原文视图：滚动与尺寸变化时重渲染可视区

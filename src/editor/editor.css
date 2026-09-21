@@ -341,14 +341,31 @@ kbd {
   background: var(--panel);
   box-shadow: var(--shadow-sm);
   color: var(--text-2);
+  /* 每个按钮一个功能色，只作用于边框和背景（约 12% 底 + 38% 边），
+     图标和文字保持 inherit，不另外染色 */
+  --btn-accent: var(--accent);
+  border-color: color-mix(in srgb, var(--btn-accent) 38%, var(--border));
+  background: color-mix(in srgb, var(--btn-accent) 12%, var(--panel));
 }
+
+/* 功能色相：转换类偏青/紫，压缩偏琥珀，示例偏绿，清空是破坏性动作用红 */
+#btnUniToggle { --btn-accent: #0d9488; }
+#btnEscToggle { --btn-accent: #7c3aed; }
+#btnMinify    { --btn-accent: #d97706; }
+#btnSample    { --btn-accent: #059669; }
+#btnClear     { --btn-accent: #dc2626; }
+
+[data-theme="dark"] #btnUniToggle { --btn-accent: #14b8a6; }
+[data-theme="dark"] #btnEscToggle { --btn-accent: #8b5cf6; }
+[data-theme="dark"] #btnMinify    { --btn-accent: #f59e0b; }
+[data-theme="dark"] #btnSample    { --btn-accent: #10b981; }
+[data-theme="dark"] #btnClear     { --btn-accent: #ef4444; }
 
 .panel-tools .btn svg { width: 14px; height: 14px; }
 
 .panel-tools .btn:hover:not(:disabled) {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
-  color: var(--accent);
+  border-color: color-mix(in srgb, var(--btn-accent) 60%, var(--border));
+  background: color-mix(in srgb, var(--btn-accent) 18%, var(--panel));
   box-shadow: var(--shadow-sm);
   transform: none;
 }
@@ -758,6 +775,12 @@ kbd {
 
 .viewer-host.is-fresh .jf-row {
   animation: rowIn .42s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+/* 渐进渲染补建的行不再播放入场动画：首屏之后的行是分帧陆续补上的，
+   若沿用 rowIn 会看到整棵树持续闪入，直接按最终态显示。 */
+.viewer-host.is-fresh .jf-row.jf-late {
+  animation: none;
 }
 
 @keyframes rowIn {

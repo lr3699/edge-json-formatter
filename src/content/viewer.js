@@ -56,13 +56,19 @@
 
   /**
    * 分批渲染上限（大 JSON 卡死修复）：
-   *  - MAX_CHUNK：每个容器一次最多渲染多少个子节点，超出部分显示「加载更多」；
-   *  - RENDER_BUDGET：一次渲染动作（初始渲染 / 展开折叠 / 手动加载）总共
-   *    允许创建的 DOM 行数。没有这两道闸门时，一个 10 万项的数组会一次性
-   *    生成几十万个 DOM 节点，页面直接假死。
+   *  - MAX_CHUNK：展开 / 「加载更多」一次同步建多少行，超出部分交给
+   *    「还有 N 项」哨兵 + 后台分帧续建；
+   *  - PAINT_ROWS / FILL_ROWS：首帧同步建多少行立刻上屏、之后每帧补建多少行。
+   *    实测 11MB JSON 一次性建 5700 行（4 万+ 节点）样式重算 + 布局近 500ms，
+   *    主线程整段卡死——分帧后首屏 ~50ms 即可见，其余行在后台补齐，期间
+   *    浏览器每帧都能响应输入与滚动。
    */
   var MAX_CHUNK = 400;
-  var RENDER_BUDGET = 5000;
+  var PAINT_ROWS = 400;
+  var FILL_ROWS = 350;
+  /** 一次渲染允许存在的总行数上限。分帧只解决「卡不卡」，不解决「该不该全建」：
+      11MB 全展开是十几万行 / 百万级节点，内存和滚动都会崩，超出部分走哨兵。 */
+  var TOTAL_ROWS = 6000;
 
   /* ------------------------------------------------------------------ *
    * 样式
@@ -340,8 +346,15 @@
 
     var body, toolbar, statusBar, toastEl, pathLabel, statsLabel;
 
-    /** 当前渲染动作剩余可创建的 DOM 行数（见 MAX_CHUNK / RENDER_BUDGET 注释） */
-    var budget = 0;
+    /**
+     * 渲染会话：可恢复的深度优先遍历状态。
+     * stack 里是待填充的容器帧，budget 是本帧还能建多少行，timer 是续建定时器。
+     * numbering=true 表示「建行时直接按文档序赋行号」（整树重渲染）；
+     * 展开/折叠只动局部，行号统一交给 renumber()，此时为 false。
+     */
+    var session = { stack: [], lines: 0, budget: 0, total: 0, timer: null,
+                    numbering: true, late: false };
+    var renderToken = 0;
     /** 输出文本缓存：outputText() 的结果按「模式+缩进」缓存，避免每次统计都全树序列化 */
     var outCache = { key: null, text: '' };
 
@@ -646,7 +659,22 @@
      * 只是切换一个 class，几十万节点零重建、零卡顿。
      * （原 renderCompactNode / renderCompactChild 已删除）
      */
-    function renderNode(parentEl, node, keyNode, isLast, path, depth) {
+    /** 取消尚未执行的续建定时器 */
+    function cancelFill() {
+      if (session.timer) { clearTimeout(session.timer); session.timer = null; }
+    }
+
+    /** 给一行赋行号（按文档序递增）。numbering=false 或未开行号时跳过 */
+    function numberRow(row) {
+      if (!session.numbering || !opts.lineNumbers) return;
+      row.firstChild.textContent = String(++session.lines);
+    }
+
+    /**
+     * 建一个节点：容器 = 开行 + 子容器 + 闭行；叶子/空容器 = 单行。
+     * 容器展开时把「待填充帧」压栈而不是递归填满，这是能分帧的关键。
+     */
+    function pushNode(parentEl, node, keyNode, isLast, path, depth) {
       depth = depth || 0;
       var isContainer = node.type === 'object' || node.type === 'array';
       var childCount = isContainer
@@ -655,6 +683,7 @@
 
       if (isContainer && childCount > 0) {
         var open = makeRow(node, depth);
+        numberRow(open);
         var content = el('span', 'jf-content');
         var toggle = makeToggle(node.expanded);
 
@@ -674,8 +703,18 @@
 
         var kids = el('div', 'jf-children');
         parentEl.appendChild(kids);
-        if (!node.expanded) kids.classList.add('jf-children-collapsed');
-        else fillChildren(kids, node, path, depth);
+
+        var frame = null;
+        if (node.expanded) {
+          // entries 排序结果缓存在帧上，避免逐子节点重复 sort
+          frame = { kidsEl: kids, node: node, path: path, depth: depth + 1,
+                    i: 0, total: childCount,
+                    entries: node.type === 'object' ? orderedEntries(node) : null,
+                    closeGut: null, moreRow: null };
+          session.stack.push(frame);
+        } else {
+          kids.classList.add('jf-children-collapsed');
+        }
 
         var closeRow = makeRow(node, depth);
         var closeContent = el('span', 'jf-content');
@@ -683,17 +722,33 @@
         if (!isLast) closeContent.appendChild(el('span', 'jf-punct', ','));
         closeRow.appendChild(closeContent);
         parentEl.appendChild(closeRow);
+        // 闭行的行号要等整个子树建完才连续：挂到帧上、出栈时赋号；
+        // 折叠容器没有子树，当场赋号
+        if (frame) frame.closeGut = closeRow.firstChild;
+        else numberRow(closeRow);
 
         function toggleNode() {
+          flushFill();                       // 上一轮渐进渲染没建完就先收尾
           node.expanded = !node.expanded;
           setToggleIcon(toggle, node.expanded);
           sum.style.display = node.expanded ? 'none' : '';
           kids.classList.toggle('jf-children-collapsed', !node.expanded);
           if (node.expanded) {
-            budget = RENDER_BUDGET;
-            fillChildren(kids, node, path, depth);
+            // 展开是用户主动动作：同步建这一层（超出 MAX_CHUNK 走哨兵 + 续建）。
+            // 行号由 renumber() 统一算，不能用会话计数器（插入点在文档中部）。
+            session.numbering = false;
+            session.total = TOTAL_ROWS;
+            session.budget = MAX_CHUNK;
+            session.stack.push({
+              kidsEl: kids, node: node, path: path, depth: depth + 1,
+              i: 0, total: childCount,
+              entries: node.type === 'object' ? orderedEntries(node) : null,
+              closeGut: null, moreRow: null
+            });
+            step();
+          } else {
+            renumber();
           }
-          renumber();
           updateStats();
         }
         toggle.addEventListener('click', toggleNode);
@@ -703,6 +758,7 @@
 
       // 基本类型，或空对象 / 空数组
       var row = makeRow(node, depth);
+      numberRow(row);
       var rowContent = el('span', 'jf-content');
       if (keyNode) {
         rowContent.appendChild(makeKeySpan(keyNode, path));
@@ -723,77 +779,119 @@
       parentEl.appendChild(row);
     }
 
-    function fillChildren(kidsEl, node, path, depth) {
-      if (kidsEl.__jfFilled) return;
-      fillMore(kidsEl, node, path, depth, MAX_CHUNK);
-      kidsEl.__jfFilled = true;
+    /**
+     * 消费任务栈，直到栈空或本帧预算用完。
+     * 深度优先的建行顺序 === 文档顺序，所以行号可以在建行时直接递增赋值；
+     * 唯一的例外是容器闭行——它的行号要等子树建完才连续，因此挂到帧上、
+     * 出栈时再赋。这使得「分帧补齐」过程中行号始终是正确的。
+     */
+    function step() {
+      while (session.stack.length) {
+        var f = session.stack[session.stack.length - 1];
+        // 先收尾已建完的容器：这样走到下面两个预算分支时，栈顶一定是
+        // 还有子节点没建的容器，「挂哨兵」才有意义。
+        // （否则会出现：总量刚好用完时栈顶已建完 → attachMore 无事可做 →
+        //   这帧直接 return，帧既不出栈、闭行行号也永远欠着，渲染卡在半途。）
+        if (f.i >= f.total) {
+          session.stack.pop();
+          if (f.moreRow && f.moreRow.parentNode) f.kidsEl.removeChild(f.moreRow);
+          if (f.closeGut) {
+            if (session.numbering && opts.lineNumbers) {
+              f.closeGut.textContent = String(++session.lines);
+            }
+            f.closeGut = null;
+          }
+          continue;
+        }
+        if (session.total <= 0) {            // 总行数到顶：挂哨兵，等用户点「加载更多」
+          attachMore();
+          // 前沿的一串闭括号行一直没等到行号（它们的行号取决于未加载的子树），
+          // 这是个用户会盯着看的稳定状态，做一次全树重编号让行号连续
+          if (opts.lineNumbers) renumber();
+          return;
+        }
+        if (session.budget <= 0) {           // 本帧建满了：挂哨兵，约下帧继续
+          attachMore();
+          scheduleFill();
+          return;
+        }
+        if (f.moreRow) {                     // 续建前先摘掉哨兵，保证新行插在它前面
+          if (f.moreRow.parentNode) f.kidsEl.removeChild(f.moreRow);
+          f.moreRow = null;
+        }
+        session.budget--;
+        session.total--;
+        var isLast = f.i === f.total - 1;
+        if (f.entries) {
+          var en = f.entries[f.i];
+          pushNode(f.kidsEl, en.value, en.keyNode, isLast,
+                   parser.joinKey(f.path, en.keyNode.value), f.depth);
+        } else {
+          pushNode(f.kidsEl, f.node.items[f.i], null, isLast,
+                   f.path + '[' + f.i + ']', f.depth);
+        }
+        f.i++;
+      }
+      // 栈空 = 本轮渲染全部建完
+      if (!session.numbering && opts.lineNumbers) renumber();
     }
 
-    /**
-     * 从 kidsEl.__jfCursor 起继续渲染 node 的子节点，最多 count 个，
-     * 且不超过当前渲染预算 budget。仍未渲染完时在末尾挂一条
-     * 「还有 N 项，点击加载更多」，点击后重置预算继续分批加载。
-     */
-    function fillMore(kidsEl, node, path, depth, count) {
-      var isObj = node.type === 'object';
-      var total = isObj ? node.entries.length : node.items.length;
-      var start = kidsEl.__jfCursor || 0;
-      if (start >= total) return;
+    /** 在当前栈顶容器的末尾挂「还有 N 项」哨兵（不占行号） */
+    function attachMore() {
+      var f = session.stack[session.stack.length - 1];
+      if (!f || f.moreRow || f.i >= f.total) return;
+      var remain = f.total - f.i;
+      var row = el('div', 'jf-row');
+      row.style.setProperty('--jf-depth', String(f.depth));
+      if (session.late) row.classList.add('jf-late');
+      var gut = el('span', 'jf-no jf-no-more');
+      if (!opts.lineNumbers) gut.style.display = 'none';
+      row.appendChild(gut);
+      // 哨兵不占行号：它会在续建时被移除，占了号就会留下一个永久的号洞
+      var ct = el('span', 'jf-content');
+      var s = el('span', 'jf-summary',
+        '… 还有 ' + remain.toLocaleString() + ' 项，点击加载更多');
+      s.title = '点击继续加载';
+      s.addEventListener('click', function () {
+        cancelFill();
+        session.numbering = false;           // 插入点在文档中部，交给 renumber()
+        session.total = TOTAL_ROWS;          // 用户主动要更多，重新给足总量
+        session.budget = MAX_CHUNK * 2;
+        step();
+      });
+      ct.appendChild(s);
+      row.appendChild(ct);
+      f.kidsEl.appendChild(row);
+      f.moreRow = row;
+    }
 
-      var limit = Math.min(count, Math.max(budget, 1));
-      var end = Math.min(total, start + limit);
-      var child = depth + 1;
-      var frag = body.ownerDocument.createDocumentFragment();
-      var i;
+    /** 把没建完的行一次性同步建完（展开/加载更多前调用，罕见路径） */
+    function flushFill() {
+      cancelFill();
+      if (!session.stack.length) return;
+      session.budget = Infinity;
+      session.total = Infinity;
+      step();
+    }
 
-      if (isObj) {
-        var entries = orderedEntries(node);
-        for (i = start; i < end; i++) {
-          renderNode(
-            frag, entries[i].value, entries[i].keyNode, i === total - 1,
-            parser.joinKey(path, entries[i].keyNode.value), child
-          );
-        }
-      } else {
-        for (i = start; i < end; i++) {
-          renderNode(frag, node.items[i], null, i === total - 1,
-            path + '[' + i + ']', child);
-        }
-      }
-
-      budget -= (end - start);
-
-      // 先移除上一条「加载更多」，再插入新内容，保证哨兵始终在末尾
-      if (kidsEl.__jfMoreRow && kidsEl.__jfMoreRow.parentNode) {
-        kidsEl.removeChild(kidsEl.__jfMoreRow);
-      }
-      kidsEl.appendChild(frag);
-      kidsEl.__jfCursor = end;
-      kidsEl.__jfMoreRow = null;
-
-      if (end < total) {
-        var moreRow = el('div', 'jf-row');
-        moreRow.style.setProperty('--jf-depth', String(child));
-        var moreContent = el('span', 'jf-content');
-        var more = el('span', 'jf-summary',
-          '… 还有 ' + (total - end).toLocaleString() + ' 项，点击加载更多');
-        more.title = '点击继续加载';
-        more.addEventListener('click', function () {
-          budget = RENDER_BUDGET;
-          fillMore(kidsEl, node, path, depth, MAX_CHUNK * 2);
-          renumber();
-        });
-        moreContent.appendChild(more);
-        moreRow.appendChild(moreContent);
-        kidsEl.appendChild(moreRow);
-        kidsEl.__jfMoreRow = moreRow;
-      }
+    /** 约下一帧继续建（setTimeout(0) 让浏览器先上屏、响应输入） */
+    function scheduleFill() {
+      if (session.timer) return;
+      var token = renderToken;
+      session.timer = setTimeout(function () {
+        session.timer = null;
+        if (token !== renderToken) return;   // 期间发起了新的格式化，这轮作废
+        session.budget = FILL_ROWS;
+        session.late = true;
+        step();
+      }, 0);
     }
 
     function renumber() {
       var gutt = body.querySelectorAll('.jf-no');
       var k = 0;
       for (var i = 0; i < gutt.length; i++) {
+        if (gutt[i].classList.contains('jf-no-more')) continue;  // 哨兵是占位符，不编号
         if (!isVisible(gutt[i])) continue;
         k++;
         gutt[i].textContent = opts.lineNumbers ? String(k) : '';
@@ -842,6 +940,8 @@
     }
 
     function render() {
+      cancelFill();
+      renderToken++;
       body.textContent = '';
       body.scrollTop = 0;
       // 压缩模式只靠 CSS class 切换排版（.jf-compact），不改变树形 DOM 结构
@@ -856,11 +956,20 @@
         updateStats();
         return;
       }
-      budget = RENDER_BUDGET;
+      /* 首帧只建 PAINT_ROWS 行就交给浏览器上屏（肉眼看是即时的），
+         剩下的行由 scheduleFill 分帧补齐。过去是一次建完 5700 行再布局，
+         样式重算 + 布局近 500ms 全部堵在主线程上。 */
+      session.stack.length = 0;
+      session.lines = 0;
+      session.numbering = true;
+      session.late = false;
+      session.budget = PAINT_ROWS;
+      session.total = TOTAL_ROWS;
       var frag = body.ownerDocument.createDocumentFragment();
-      renderNode(frag, state.root, null, true, '$', 0);
+      pushNode(frag, state.root, null, true, '$', 0);
       body.appendChild(frag);
-      renumber();
+      session.late = true;
+      step();                                // 用掉剩余的首帧预算，不够则自动约下帧
       updateStats();
     }
 
