@@ -95,11 +95,18 @@ def main(argv=None):
         ).get("value")
         check("大整数未丢精度", bool(big))
 
-        # 设置抽屉
+        # 设置抽屉：先用「计算后的可见性」断言，防止 CSS 覆盖 hidden 属性的 bug 复发
+        disp0 = client.evaluate(
+            "getComputedStyle(document.getElementById('drawer')).display"
+        ).get("value")
+        check("抽屉默认关闭", disp0 == "none", "display=%s" % disp0)
+
         client.evaluate("document.getElementById('btnOptions').click()")
         time.sleep(0.6)
-        opened = client.evaluate("!document.getElementById('drawer').hidden").get("value")
-        check("设置抽屉可打开", bool(opened))
+        opened = client.evaluate(
+            "getComputedStyle(document.getElementById('drawer')).display"
+        ).get("value")
+        check("设置抽屉可打开", opened not in (None, "none"), "display=%s" % opened)
 
         controls = client.evaluate("document.querySelectorAll('#drawerBody .set-row').length").get("value")
         check("设置项齐全", bool(controls) and controls >= 8, "rows=%s" % controls)
@@ -123,6 +130,10 @@ def main(argv=None):
 
         client.evaluate("document.getElementById('drawerClose').click()")
         time.sleep(0.3)
+        closed = client.evaluate(
+            "getComputedStyle(document.getElementById('drawer')).display"
+        ).get("value")
+        check("抽屉可关闭", closed == "none", "display=%s" % closed)
 
         # 分享链接还原
         client.evaluate("document.getElementById('btnOptions').click()")

@@ -57,6 +57,13 @@
 
 /* ------------------------------------------------------------ 设置抽屉 */
 
+/* 关键：.drawer 自己声明了 display:flex，会把 UA 样式表里的
+   [hidden] { display: none } 顶掉，导致抽屉常显。这里显式补回。 */
+.drawer[hidden],
+.drawer-mask[hidden] {
+  display: none;
+}
+
 .drawer-mask {
   position: fixed;
   inset: 0;
