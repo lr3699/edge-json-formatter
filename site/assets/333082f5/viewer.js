@@ -73,9 +73,12 @@
   /* ------------------------------------------------------------------ *
    * 样式
    * ------------------------------------------------------------------ */
-  var VIEWER_CSS = [
-    '.jf-root{all:initial;}',
-    '.jf-root{',
+  /**
+   * 配色 token 单独成串：既挂到树视图的 .jf-root，也挂到大文档视图的 .jf-big。
+   * 两者必须共用同一份定义——不然改了一处、另一处配色就分叉了
+   * （bigview.js 的 CodeMirror 主题正是按这些变量上色的）。
+   */
+  var TOKEN_LIGHT = [
     '  --jf-indent:' + INDENT_PX + 'px;',
     '  --jf-lh:' + Math.round(DEFAULT_FONT_SIZE * LINE_RATIO) + 'px;',
     '  --jf-bg:#ffffff;',
@@ -102,6 +105,25 @@
     '  --jf-primary-hover:#2f9e3d;',
     '  --jf-key-bg:rgba(146,39,143,.08);',
     '  --jf-shadow:0 12px 48px rgba(15,23,42,.18);',
+  ].join('\n');
+
+  var TOKEN_DARK = [
+    '  --jf-bg:#15171c;--jf-bg-alt:#1b1e24;--jf-bg-hover:#22262e;',
+    '  --jf-border:#2b3038;--jf-border-strong:#363c46;',
+    '  --jf-text:#d7dbe0;--jf-muted:#6f7681;',
+    '  --jf-key:#c98ad4;--jf-str:#79d17f;--jf-num:#4dc4f0;--jf-bool:#ff8a8a;',
+    '  --jf-null:#7d8590;--jf-punct:#5b626c;--jf-toggle:#ff8a8a;--jf-toggle-hover:#ffb0b0;',
+    '  --jf-guide:#242830;--jf-accent:#4dc4f0;--jf-accent-soft:#12303d;',
+    '  --jf-ok:#79d17f;--jf-ok-soft:#16301a;',
+    '  --jf-primary:#2f9e3d;--jf-primary-hover:#3ab54a;',
+    '  --jf-key-bg:rgba(201,138,212,.14);',
+    '  --jf-shadow:0 12px 48px rgba(0,0,0,.55);',
+  ].join('\n');
+
+  var VIEWER_CSS = [
+    '.jf-root{all:initial;}',
+    '.jf-root{',
+    TOKEN_LIGHT,
     '  position:relative;display:flex;flex-direction:column;height:100%;width:100%;',
     '  background:var(--jf-bg);color:var(--jf-text);',
     '  font-family:' + MONO_FONT + ';',
@@ -115,16 +137,22 @@
     '  visibility:visible;opacity:1;overflow:hidden;',
     '}',
     '.jf-root[data-theme="dark"]{',
-    '  --jf-bg:#15171c;--jf-bg-alt:#1b1e24;--jf-bg-hover:#22262e;',
-    '  --jf-border:#2b3038;--jf-border-strong:#363c46;',
-    '  --jf-text:#d7dbe0;--jf-muted:#6f7681;',
-    '  --jf-key:#c98ad4;--jf-str:#79d17f;--jf-num:#4dc4f0;--jf-bool:#ff8a8a;',
-    '  --jf-null:#7d8590;--jf-punct:#5b626c;--jf-toggle:#ff8a8a;--jf-toggle-hover:#ffb0b0;',
-    '  --jf-guide:#242830;--jf-accent:#4dc4f0;--jf-accent-soft:#12303d;',
-    '  --jf-ok:#79d17f;--jf-ok-soft:#16301a;',
-    '  --jf-primary:#2f9e3d;--jf-primary-hover:#3ab54a;',
-    '  --jf-key-bg:rgba(201,138,212,.14);',
-    '  --jf-shadow:0 12px 48px rgba(0,0,0,.55);',
+    TOKEN_DARK,
+    '}',
+
+    /* 大文档视图（CodeMirror）宿主：不套 .jf-root 的 all:initial，
+       只借同一套 token，外加必须的尺寸与等宽字体 */
+    '.jf-big{',
+    TOKEN_LIGHT,
+    '  position:relative;display:block;height:100%;width:100%;overflow:hidden;',
+    '  background:var(--jf-bg);color:var(--jf-text);',
+    '  font-family:' + MONO_FONT + ';',
+    '  font-size:' + DEFAULT_FONT_SIZE + 'px;',
+    '  box-sizing:border-box;',
+    '}',
+    '.jf-big *,.jf-big *::before,.jf-big *::after{box-sizing:border-box;}',
+    '.jf-big[data-theme="dark"]{',
+    TOKEN_DARK,
     '}',
     '.jf-root *,.jf-root *::before,.jf-root *::after{box-sizing:border-box;}',
     /* macOS 深色下用灰阶抗锯齿：浅色文字在深底上默认会显得偏重、发糊。
@@ -1234,5 +1262,12 @@
   }
 
   NS.createViewer = createViewer;
+
+  /**
+   * 确保查看器样式表（含 --jf-* 配色 token）已注入到 el 所在文档 / ShadowRoot。
+   * 大文档视图（bigview.js）没有树视图实例可依附，得自己保证 token 可用——
+   * 否则 CodeMirror 主题里那些 var(--jf-bg) 全部取不到值，配色会整片丢掉。
+   */
+  NS.installViewerStyles = installStyles;
   NS.VIEWER_CSS = VIEWER_CSS;
 })();

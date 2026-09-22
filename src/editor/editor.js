@@ -102,6 +102,8 @@
   function setMessage(text, kind) {
     msgEl.textContent = text || '';
     msgEl.className = 'msg' + (kind ? ' ' + kind : '');
+    // 大文档模式会把完整说明挂在 title 上；换了文案就清掉，免得残留旧提示
+    msgEl.title = '';
   }
 
   function formatBytes(n) {
@@ -255,6 +257,8 @@
         // 让主题作用到整个页面（顶栏 / 输入面板 / 背景），而不是只有右侧查看器。
         // resolved 是「auto」折算后的实际主题（light|dark），raw 是用户选的档位。
         applyPageTheme(resolved);
+        // 大文档视图是独立的 CM 实例，主题要单独推给它
+        if (bigView) bigView.setOptions({ dark: resolved === 'dark' });
       },
       onSettingsChange: function (patch) {
         Object.assign(settings, patch);
@@ -269,8 +273,123 @@
   }
 
   function showOutput(show) {
-    viewerHost.hidden = !show;
-    welcomeEl.hidden = show;
+    if (!show) {
+      viewerHost.hidden = true;
+      bigHost.hidden = true;
+      welcomeEl.hidden = false;
+      return;
+    }
+    welcomeEl.hidden = true;
+    // 具体显示哪个宿主由 doFormat / doFormatBig 决定，这里只保证「有东西可见」
+    if (!bigHost.hidden) return;
+    viewerHost.hidden = false;
+  }
+
+  /* ---------------- 大文档视图（CodeMirror 6 虚拟化） ---------------- */
+
+  var bigHost = $('bigView');
+  var bigView = null;
+  /** null = 自动判断；true/false = 用户在设置里手动指定 */
+  var bigMode = null;
+  /** 超过这个体积默认走大文档视图。600KB 的 JSON 树视图已接近千行，滚动开始发涩 */
+  var BIG_MIN_CHARS = 600 * 1024;
+  /** 大文档视图可用时，自动格式化的体积上限放宽到 64MB（虚拟化渲染与行数无关） */
+  var BIG_AUTO_MAX = 64 * 1024 * 1024;
+
+  function resolvedTheme() {
+    var t = settings.theme;
+    if (t === 'auto') {
+      t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        ? 'dark' : 'light';
+    }
+    return t;
+  }
+
+  /**
+   * 是否该用大文档视图。
+   *
+   * 不再拿 hasRawRisk 当门槛：bigview.js 内部把排版分成两条路——没有「写不回去
+   * 的写法」时用原生 JSON.parse + JSON.stringify（最快），命中 \uXXXX / \/ /
+   * 16 位以上整数时改用字符扫描（只加换行缩进，原文字节级保留）。所以带大整数
+   * 的大文档也能进虚拟化视图，不会再像以前那样退回几十秒才建完的树视图。
+   */
+  function useBigView(text) {
+    if (!NS.hasBigView) return false;
+    if (bigMode === false) return false;
+    if (bigMode === true) return true;
+    return text.length >= BIG_MIN_CHARS;
+  }
+
+  /**
+   * 自动格式化的体积上限。大文档视图可用时放宽到 64MB：
+   * 虚拟化渲染与文档行数无关，20MB 的大写按旧上限只会得到一句「内容过大」，
+   * 那正是用户抱怨「大 JSON 点了半天看不到完整结果」的来源之一。
+   */
+  function autoSizeLimit() {
+    if (NS.hasBigView && bigMode !== false) {
+      return Math.max(settings.maxAutoSize, BIG_AUTO_MAX);
+    }
+    return settings.maxAutoSize;
+  }
+
+  function ensureBigView() {
+    if (!bigView) {
+      bigView = NS.createBigView(bigHost, {
+        indent: numberOr(settings.indent, 2),
+        wrap: !!settings.wrap,
+        fontSize: numberOr(settings.fontSize, 14),
+        lineNumbers: !!settings.lineNumbers,
+        dark: resolvedTheme() === 'dark'
+      });
+    }
+    return bigView;
+  }
+
+  function hideBigView() {
+    bigHost.hidden = true;
+    // 离开大文档视图：顶栏与底部状态带恢复正常，输入栏也交回给用户
+    setBigDocMode(false);
+  }
+
+  function doFormatBig(text) {
+    // 先让宿主可见、并切到「单栏 + 收窄」布局，再创建 CodeMirror ——
+    // CM 会量可视区尺寸，在 display:none 或半宽状态下建实例会量错。
+    viewerHost.hidden = true;
+    welcomeEl.hidden = true;
+    bigHost.hidden = false;
+    setBigDocMode(true);
+
+    var bv = ensureBigView();
+    // 排版是同步的：29MB 压缩 JSON → 约 700ms（原生） / 1.2s（保真路径）。
+    // 先让浏览器把「解析中…」画出来再开工，否则用户会看到界面卡住不动。
+    var run = function () {
+      var ok = bv.setText(text);
+      var st = bv.getState();
+      if (!ok) {
+        setPill('is-err', '格式有误');
+        setMessage(st.error || '内容不是合法 JSON', 'err');
+      } else {
+        setPill('is-ok', st.exact ? '格式化成功' : '格式化成功（原文保真）');
+        // 底部状态带只留最要紧的三个数：行数 / 耗时 / 渲染方式。
+        // 完整说明放进 title —— 长文案换行会把底部撑成两排，白占 JSON 的高度。
+        setMessage('大文档模式 · ' + st.rows.toLocaleString('zh-CN') + ' 行 · ' +
+                   st.elapsed + 'ms · 虚拟化渲染', 'ok');
+        msgEl.title = '虚拟化渲染：只绘制视口附近的行，' + st.rows.toLocaleString('zh-CN') +
+                      ' 行也能立刻出现、滚动流畅；支持折叠、搜索、行号与括号匹配';
+      }
+      updateStats();
+    };
+
+    setPill('is-busy', '解析中…');
+    setMessage('大文档模式 · 正在排版 ' + formatBytes(text.length) + '…');
+    // rAF 之后再做重活，保证「解析中…」这一帧真的被画出来
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+    else setTimeout(run, 0);
+  }
+
+  function numberOr(v, fallback) {
+    var n = parseInt(v, 10);
+    return isNaN(n) ? fallback : n;
   }
 
   /* ---------------- 入场动效 ---------------- */
@@ -305,6 +424,7 @@
 
     if (!text.trim()) {
       lastRendered = null;
+      setBigDocMode(false);
       if (viewer) showOutput(false);
       setPill('', '就绪');
       setMessage('');
@@ -312,15 +432,25 @@
     }
 
     // 超大内容不自动渲染，避免刚载入就把页面卡住
-    if (!force && text.length > settings.maxAutoSize) {
+    if (!force && text.length > autoSizeLimit()) {
       setPill('is-err', '内容过大');
-      setMessage('超过自动格式化上限 ' + formatBytes(settings.maxAutoSize) +
+      setMessage('超过自动格式化上限 ' + formatBytes(autoSizeLimit()) +
                  '，按 Ctrl+Enter 强制格式化');
       return;
     }
 
     // 先让宿主可见，再创建查看器，避免在 display:none 下量尺寸
     showOutput(true);
+
+    /* 大文档走 CodeMirror 虚拟化视图：树视图是一节点一行 DOM，
+       20MB JSON 是 61 万行，分帧建完要几十秒；虚拟化只画可见的几十行。 */
+    if (useBigView(text)) {
+      lastRendered = text;
+      doFormatBig(text);
+      return;
+    }
+
+    hideBigView();
     var v = ensureViewer();
 
     var changed = text !== lastRendered;
@@ -346,9 +476,9 @@
     updateStats();
     // 超大内容：同步给出「内容过大」提示，不要等 220ms 防抖的 setTimeout——
     // 那会被浏览器后续的重排推迟，用户看到的反馈就延迟了数秒。
-    if (sourceText.length > settings.maxAutoSize) {
+    if (sourceText.length > autoSizeLimit()) {
       setPill('is-err', '内容过大');
-      setMessage('超过自动格式化上限 ' + formatBytes(settings.maxAutoSize) +
+      setMessage('超过自动格式化上限 ' + formatBytes(autoSizeLimit()) +
                  '，按 Ctrl+Enter 强制格式化');
       if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
       return;
@@ -415,40 +545,46 @@
     }
   });
 
-  /* ---------------- 拖入文件 ---------------- */
+  /* ---------------- 拖入文件 ----------------
+     输入栏在大文档模式下会收起（.is-solo），所以拖放不能只绑在它上面，
+     否则「收起输入栏后拖文件进去」会没反应。两条面板都接。 */
 
-  ['dragenter', 'dragover'].forEach(function (type) {
-    panelInput.addEventListener(type, function (e) {
-      e.preventDefault();
-      panelInput.classList.add('is-dragover');
+  var dropZones = [panelInput, $('panelOutput')].filter(Boolean);
+
+  dropZones.forEach(function (zone) {
+    ['dragenter', 'dragover'].forEach(function (type) {
+      zone.addEventListener(type, function (e) {
+        e.preventDefault();
+        zone.classList.add('is-dragover');
+      });
     });
-  });
 
-  ['dragleave', 'drop'].forEach(function (type) {
-    panelInput.addEventListener(type, function (e) {
-      e.preventDefault();
-      if (type === 'dragleave' && panelInput.contains(e.relatedTarget)) return;
-      panelInput.classList.remove('is-dragover');
+    ['dragleave', 'drop'].forEach(function (type) {
+      zone.addEventListener(type, function (e) {
+        e.preventDefault();
+        if (type === 'dragleave' && zone.contains(e.relatedTarget)) return;
+        zone.classList.remove('is-dragover');
+      });
     });
-  });
 
-  panelInput.addEventListener('drop', function (e) {
-    var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-    if (!file) return;
-    var reader = new FileReader();
-    reader.onload = function () {
-      var text = String(reader.result || '');
-      setInputText(text);
-      fileInfoEl.textContent = file.name + ' · ' + formatBytes(file.size);
-      inputKind = 'drop';
-      setMessage('已读入 ' + file.name, 'ok');
-      formatNow();
-    };
-    reader.onerror = function () {
-      setPill('is-err', '读取失败');
-      setMessage('无法读取文件：' + file.name, 'err');
-    };
-    reader.readAsText(file, 'utf-8');
+    zone.addEventListener('drop', function (e) {
+      var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        var text = String(reader.result || '');
+        setInputText(text);
+        fileInfoEl.textContent = file.name + ' · ' + formatBytes(file.size);
+        inputKind = 'drop';
+        setMessage('已读入 ' + file.name, 'ok');
+        formatNow();
+      };
+      reader.onerror = function () {
+        setPill('is-err', '读取失败');
+        setMessage('无法读取文件：' + file.name, 'err');
+      };
+      reader.readAsText(file, 'utf-8');
+    });
   });
 
   /* ---------------- 按钮 ---------------- */
@@ -787,6 +923,48 @@
     }
   });
 
+  /* ---------------- 输入栏收起 / 大文档最大化 ---------------- */
+
+  /* 两件互相独立但常一起生效的事：
+       is-solo    —— 左栏与分隔条让位，输出独占整宽（JSON 区从半宽变整宽）；
+       is-bigdoc  —— 大文档正在展示，顶栏、外边距、底部状态带一起收窄。
+     自动判定（大文档 → 收起）与手动开关共存：用户点过一次按钮就固定为手动，
+     不再被内容切换来回夺走控制权。 */
+  var btnSolo = $('btnSolo');
+  var soloLabel = $('soloLabel');
+  /** null = 跟随内容自动；true / false = 用户手动指定 */
+  var soloMode = null;
+  /** 自动判定结果：大文档展示时为 true */
+  var autoSolo = false;
+
+  function soloWanted() {
+    return soloMode === null ? autoSolo : soloMode;
+  }
+
+  function applySoloState() {
+    var on = soloWanted();
+    workspaceEl.classList.toggle('is-solo', on);
+    if (btnSolo) {
+      btnSolo.setAttribute('aria-pressed', on ? 'true' : 'false');
+      btnSolo.title = on ? '展开左侧输入栏' : '收起左侧输入栏，把宽度让给 JSON';
+    }
+    if (soloLabel) soloLabel.textContent = on ? '显示输入' : '输入栏';
+  }
+
+  if (btnSolo) {
+    btnSolo.addEventListener('click', function () {
+      soloMode = !soloWanted();
+      applySoloState();
+    });
+  }
+
+  /** 大文档模式开关：收窄顶栏与底部状态带，并自动收起输入栏 */
+  function setBigDocMode(on) {
+    autoSolo = !!on;
+    document.body.classList.toggle('is-bigdoc', !!on);
+    applySoloState();
+  }
+
   /* ---------------- 设置同步 ---------------- */
 
   /**
@@ -804,6 +982,15 @@
 
   function applySettingsToViewer() {
     if (viewer) viewer.updateOptions(viewerOptions());
+    if (bigView) {
+      bigView.setOptions({
+        indent: numberOr(settings.indent, 2),
+        wrap: !!settings.wrap,
+        fontSize: numberOr(settings.fontSize, 14),
+        lineNumbers: !!settings.lineNumbers,
+        dark: resolvedTheme() === 'dark'
+      });
+    }
   }
 
   NS.loadSettings().then(function (loaded) {
@@ -843,6 +1030,8 @@
 
   updateStats();
   showOutput(false);
+  // 初始化「输入栏收起」按钮的文案/状态（默认展开）
+  applySoloState();
   // 打开就聚焦，点完扩展图标可以直接 Ctrl+V
   inputEl.focus();
 })();

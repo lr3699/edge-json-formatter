@@ -12,9 +12,9 @@
   <meta property="og:description" content="双栏 JSON 工作台：左栏粘贴原文、右栏实时预览，可折叠树、搜索、JSONPath 复制，纯本地运行。">
   <meta property="og:image" content="https://lr3699.github.io/json-formatter-pro/og-image.png">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="icon" href="favicon.png?v=b177515a" type="image/png">
-  <link rel="stylesheet" href="assets/b177515a/editor.css">
-  <link rel="stylesheet" href="app.css?v=b177515a">
+  <link rel="icon" href="favicon.png?v=333082f5" type="image/png">
+  <link rel="stylesheet" href="assets/333082f5/editor.css">
+  <link rel="stylesheet" href="app.css?v=333082f5">
 </head>
 <body>
   <div class="aurora" aria-hidden="true">
@@ -49,6 +49,15 @@
         <em class="keys-sep">·</em>
         <kbd>F</kbd><i>全屏</i>
       </span>
+      <button id="btnSolo" class="btn btn-ghost panel-solo-toggle" type="button"
+              aria-pressed="false" title="收起 / 展开左侧输入栏，把宽度让给 JSON">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="2.5"/>
+          <line x1="9.5" y1="4.5" x2="9.5" y2="19.5"/>
+        </svg>
+        <span id="soloLabel">输入栏</span>
+      </button>
       <button id="btnFullscreen" class="btn btn-ghost" type="button"
               aria-pressed="false" title="全屏查看（F）">
         <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -141,6 +150,8 @@
 
     <section class="panel panel-output" id="panelOutput">
       <div id="viewer" class="viewer-host" hidden></div>
+      <!-- 大文档视图（CodeMirror 6 虚拟化）：文本超阈值时用它替代树视图 -->
+      <div id="bigView" class="viewer-host big-view" hidden></div>
       <div id="welcome" class="welcome">
         <div class="welcome-art">
           <svg viewBox="0 0 120 96" fill="none" aria-hidden="true">
@@ -196,11 +207,13 @@
     </section>
   </aside>
 
-  <script src="assets/b177515a/defaults.js"></script>
-  <script src="assets/web-storage.js?v=b177515a"></script>
-  <script src="assets/b177515a/json-parser.js"></script>
-  <script src="assets/b177515a/viewer.js"></script>
-  <script src="assets/b177515a/editor.js"></script>
-  <script src="assets/web-settings.js?v=b177515a"></script>
+  <script src="assets/333082f5/codemirror.bundle.js"></script>
+  <script src="assets/333082f5/defaults.js"></script>
+  <script src="assets/web-storage.js?v=333082f5"></script>
+  <script src="assets/333082f5/json-parser.js"></script>
+  <script src="assets/333082f5/viewer.js"></script>
+  <script src="assets/333082f5/bigview.js"></script>
+  <script src="assets/333082f5/editor.js"></script>
+  <script src="assets/web-settings.js?v=333082f5"></script>
 </body>
 </html>

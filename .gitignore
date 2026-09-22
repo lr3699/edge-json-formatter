@@ -7,6 +7,9 @@ __pycache__/
 *.pyc
 *.pyo
 
+# 本机 npm 代理配置（每台机器不同，端口还会变，不入库）
+.npmrc
+
 # 临时与日志
 .tmp_*
 *.log

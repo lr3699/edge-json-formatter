@@ -612,12 +612,14 @@ kbd {
 }
 .raw-view[hidden] { display: none; }
 
-.panel-input.is-dragover {
+/* 拖放提示：输入栏与输出栏都是投放区（大文档模式下输入栏会收起，
+   只绑输入栏的话「收起后拖文件」会没反应）。 */
+.panel.is-dragover {
   border-color: var(--accent);
   box-shadow: var(--shadow-md), 0 0 0 3px var(--ring);
 }
 
-.panel-input.is-dragover::after {
+.panel.is-dragover::after {
   content: "松开即可读入文件";
   position: absolute;
   inset: 0;
@@ -682,6 +684,38 @@ kbd {
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
+}
+
+/* ---------------- 大文档视图（CodeMirror 6 虚拟化） ----------------
+   宿主只负责给尺寸；配色由 bigview.js 的 CM 主题按 --jf-* 变量铺，
+   这些 token 由 viewer.js 注入的样式表在 .jf-big 上定义（与树视图同一份），
+   深色靠宿主自身的 data-theme="dark" 切换，所以切主题不用改这里的 CSS。 */
+.big-view {
+  overflow: hidden;
+  display: block;
+  min-height: 0;
+}
+
+.big-view[hidden] { display: none; }
+
+.big-view .cm-editor {
+  height: 100%;
+  width: 100%;
+}
+
+.big-view .cm-editor.cm-focused { outline: none; }
+
+/* 只读视图不需要活动行高亮，光标留在折叠槽里更干净 */
+.big-view .cm-cursor,
+.big-view .cm-dropCursor { display: none; }
+
+.big-view .cm-foldPlaceholder {
+  background: var(--bg-subtle, rgba(127, 127, 127, .18));
+  border: 0;
+  color: var(--text-dim, #888);
+  border-radius: 3px;
+  padding: 0 4px;
+  margin: 0 2px;
 }
 
 /* -------------------------------------------------------------- 欢迎页 */
@@ -802,13 +836,46 @@ html.is-fullscreen body { height: 100%; }
 
 /* 沉浸阅读：左栏与分隔条让位，输出区独占整个工作区。
    放在窄屏媒体查询之后，靠 .workspace.is-focus 的更高权重覆盖其列定义。 */
-.workspace.is-focus {
+.workspace.is-focus,
+.workspace.is-solo {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
 }
 
 .workspace.is-focus > .panel-input,
-.workspace.is-focus > .splitter { display: none; }
+.workspace.is-focus > .splitter,
+.workspace.is-solo > .panel-input,
+.workspace.is-solo > .splitter { display: none; }
+
+/* ------------------------------------------------ 大文档模式：空间全给 JSON
+   .is-solo 只是「输入栏收起」，.is-bigdoc 是「大文档正在展示」——
+   后者把顶栏、外边距、底部状态带一起收窄，省下来的高度全给 JSON 视口。
+   底部状态带原来被长文案换行撑到 40px，看起来像两排字；这里压成单行 24px。 */
+
+body.is-bigdoc .topbar { padding: 5px 14px; gap: 10px; }
+body.is-bigdoc .topbar .keys { display: none; }
+body.is-bigdoc .brand-mark { width: 26px; height: 26px; border-radius: 7px; }
+body.is-bigdoc .brand-mark svg { width: 16px; height: 16px; }
+body.is-bigdoc .brand-text em { display: none; }
+
+body.is-bigdoc .workspace { padding: 8px 10px 10px; }
+
+body.is-bigdoc .panel-foot {
+  min-height: 24px;
+  padding: 2px 12px;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+body.is-bigdoc .panel-foot .msg,
+body.is-bigdoc .panel-foot .muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 大文档展示时输入栏默认收起，按钮回到「显示输入」的语义 */
+.panel-solo-toggle[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
 
 /* 全屏时收紧外边距，把空间尽量留给内容 */
 html.is-fullscreen .workspace { padding: 10px 12px 12px; }

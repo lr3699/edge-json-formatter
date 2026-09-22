@@ -773,6 +773,7 @@
     stats: stats,
     setAllExpanded: setAllExpanded,
     joinKey: joinKey,
+    hasRawRisk: hasRawRisk,
     JsonParseError: JsonParseError
   };
 })();
