@@ -259,6 +259,7 @@
         applyPageTheme(resolved);
         // 大文档视图是独立的 CM 实例，主题要单独推给它
         if (bigView) bigView.setOptions({ dark: resolved === 'dark' });
+        syncBigToolbar();
       },
       onSettingsChange: function (patch) {
         Object.assign(settings, patch);
@@ -411,8 +412,201 @@
 
   function hideBigView() {
     bigHost.hidden = true;
+    bigToolbarEl.hidden = true;
     // 离开大文档视图：顶栏与底部状态带恢复正常，输入栏也交回给用户
     setBigDocMode(false);
+  }
+
+  /* ---------------- 大文档视图的工具条 ----------------
+   * bigview.js 只把 CodeMirror 放进宿主，自己不建任何 DOM；树视图那条工具条又随
+   * #viewer 一起被 hidden。于是「大文档」下复制 / 下载 / 搜索 / 折叠全都点不到
+   * ——这正是用户反馈的「大 JSON 格式化后按钮丢了」。
+   * 这里补一条与大视图配套的工具条，按钮直连 bigview 的公开 API，配色沿用
+   * 树视图那一套 --jf-* token（见 viewer.js 的 .jf-bigtoolbar）。
+   */
+  var bigToolbarEl = $('bigToolbar');
+  var bt = {};
+  var BT_THEME_ORDER = ['auto', 'light', 'dark'];
+  var BT_THEME_LABEL = { auto: '跟随系统', light: '浅色', dark: '深色' };
+
+  function btBtn(label, icon, title, handler, variant) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'jf-btn' + (variant ? ' jf-' + variant : '');
+    b.title = title || label || '';
+    if (icon && NS.jfIcon) {
+      var ic = NS.jfIcon(icon);
+      if (ic) b.appendChild(ic);
+    }
+    if (label) {
+      var sp = document.createElement('span');
+      sp.textContent = label;
+      b.__jfLabel = sp;
+      b.appendChild(sp);
+    }
+    b.addEventListener('click', handler);
+    return b;
+  }
+
+  function setBtLabel(btn, text) {
+    if (btn && btn.__jfLabel) btn.__jfLabel.textContent = text;
+  }
+
+  function buildBigToolbar() {
+    if (!bigToolbarEl || bigToolbarEl.childNodes.length) return;
+
+    bt.search = btBtn('搜索', null, '在结果里查找（Ctrl+F）', function () {
+      if (bigView) { bigView.openSearch(); bigView.focus(); }
+    }, 'btn-solid');
+    bigToolbarEl.appendChild(bt.search);
+
+    // 折叠态由按钮自己记；换文档时在 doFormatBig 里复位
+    bt.fold = btBtn('折叠全部', null, '把可折叠的层级全部收起来', function () {
+      if (!bigView) return;
+      bt.folded = !bt.folded;
+      if (bt.folded) bigView.foldAll();
+      else bigView.unfoldAll();
+      syncBigToolbar();
+    }, 'btn-solid');
+    bigToolbarEl.appendChild(bt.fold);
+
+    bt.lineno = btBtn('行号', null, '', function () {
+      settings.lineNumbers = !settings.lineNumbers;
+      NS.saveSettings({ lineNumbers: settings.lineNumbers });
+      applySettingsToViewer();
+    }, 'btn-solid');
+    bigToolbarEl.appendChild(bt.lineno);
+
+    bt.wrap = btBtn('折行', null, '', function () {
+      settings.wrap = !settings.wrap;
+      NS.saveSettings({ wrap: settings.wrap });
+      applySettingsToViewer();
+    }, 'btn-solid');
+    bigToolbarEl.appendChild(bt.wrap);
+
+    bt.theme = btBtn('主题', 'theme', '', function () {
+      var i = BT_THEME_ORDER.indexOf(settings.theme);
+      settings.theme = BT_THEME_ORDER[(i < 0 ? 0 : i + 1) % BT_THEME_ORDER.length];
+      NS.saveSettings({ theme: settings.theme });
+      // 与树视图的主题按钮同一条路径：先换整页底色，再推给两个视图
+      applyPageTheme(resolvedTheme());
+      applySettingsToViewer();
+    }, 'btn-solid');
+    bigToolbarEl.appendChild(bt.theme);
+
+    // 美化 ⇄ 压缩：与树视图那条按钮同一套语义（文案写当前模式，点了切到另一种）
+    bt.mode = btBtn('美化', null, '', function () {
+      if (!bigView) return;
+      bigView.format(null, !bigView.getState().compact);
+      refreshBigStatus();
+      syncBigToolbar();
+    }, 'btn-solid');
+    bigToolbarEl.appendChild(bt.mode);
+
+    var sp = document.createElement('div');
+    sp.className = 'jf-spacer';
+    bigToolbarEl.appendChild(sp);
+
+    bt.copy = btBtn('复制', 'copy', '复制全部结果', function () {
+      var t = bigView ? bigView.getText() : '';
+      copyText(t, '已复制 ' + formatBytes(t.length));
+    }, 'btn-primary');
+    bigToolbarEl.appendChild(bt.copy);
+
+    bt.download = btBtn('下载', 'download', '下载为 .json 文件', function () {
+      downloadText(bigView ? bigView.getText() : '',
+                   (settings.fileNamePrefix || 'data') + '.json');
+    }, 'btn-outline');
+    bigToolbarEl.appendChild(bt.download);
+
+    syncBigToolbar();
+  }
+
+  /** 刷新大文档工具条的文案、选中态与主题属性 */
+  function syncBigToolbar() {
+    if (!bigToolbarEl) return;
+    bigToolbarEl.setAttribute('data-theme', resolvedTheme() === 'dark' ? 'dark' : 'light');
+    if (bt.fold) {
+      setBtLabel(bt.fold, bt.folded ? '展开全部' : '折叠全部');
+      bt.fold.title = bt.folded ? '把折叠的层级全部展开' : '把可折叠的层级全部收起来';
+    }
+    if (bt.lineno) {
+      bt.lineno.classList.toggle('jf-btn-on', !!settings.lineNumbers);
+      bt.lineno.title = '显示行号：' + (settings.lineNumbers ? '已开启' : '已关闭') + '（点击切换）';
+    }
+    if (bt.wrap) {
+      bt.wrap.classList.toggle('jf-btn-on', !!settings.wrap);
+      bt.wrap.title = '自动折行：' + (settings.wrap ? '已开启' : '已关闭（超宽可横向滚动）') + '（点击切换）';
+    }
+    if (bt.theme) {
+      setBtLabel(bt.theme, BT_THEME_LABEL[settings.theme] || '主题');
+      bt.theme.classList.toggle('jf-btn-on', settings.theme !== 'auto');
+      bt.theme.title = '主题：' + (BT_THEME_LABEL[settings.theme] || '跟随系统') + '（点击切换）';
+    }
+    if (bt.mode) {
+      var compact = !!(bigView && bigView.getState().compact);
+      setBtLabel(bt.mode, compact ? '压缩' : '美化');
+      bt.mode.classList.toggle('jf-btn-on', compact);
+      bt.mode.title = compact
+        ? '输出：压缩（单行）——点击切换为美化'
+        : '输出：美化（缩进展开）——点击切换为压缩';
+    }
+  }
+
+  /** 大文档排版完成后刷新底部状态；压缩 / 美化切换会改行数，所以要能单独调用 */
+  function refreshBigStatus() {
+    if (!bigView) return;
+    var st = bigView.getState();
+    setPill('is-ok', st.exact ? '格式化成功' : '格式化成功（原文保真）');
+    setMessage('大文档模式 · ' + st.rows.toLocaleString('zh-CN') + ' 行 · ' +
+               st.elapsed + 'ms · 虚拟化渲染', 'ok');
+  }
+
+  /** 复制到剪贴板：navigator.clipboard 失败时退回 textarea + execCommand */
+  function copyText(text, okMessage) {
+    if (!text) { setMessage('没有可复制的内容', 'err'); return; }
+    var done = function () { setMessage(okMessage || '已复制', 'ok'); };
+    var fallback = function () {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '-1000px';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+        done();
+      } catch (e) {
+        setMessage('复制失败，请手动选择文本', 'err');
+      }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  function downloadText(text, name) {
+    if (!text) { setMessage('没有可下载的内容', 'err'); return; }
+    try {
+      var blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 3000);
+      setMessage('已开始下载 ' + name, 'ok');
+    } catch (e) {
+      setMessage('下载失败', 'err');
+    }
   }
 
   function doFormatBig(text) {
@@ -422,6 +616,10 @@
     clearViewInfo();
     welcomeEl.hidden = true;
     bigHost.hidden = false;
+    buildBigToolbar();
+    bigToolbarEl.hidden = false;
+    bt.folded = false;
+    syncBigToolbar();
     setBigDocMode(true);
 
     var bv = ensureBigView();
@@ -434,11 +632,9 @@
         setPill('is-err', '格式有误');
         setMessage(st.error || '内容不是合法 JSON', 'err');
       } else {
-        setPill('is-ok', st.exact ? '格式化成功' : '格式化成功（原文保真）');
-        // 底部状态带只留最要紧的三个数：行数 / 耗时 / 渲染方式。
+        // 底部状态带只留最要紧的三个数：行数 / 耗时 / 渲染方式（见 refreshBigStatus）。
         // 完整说明放进 title —— 长文案换行会把底部撑成两排，白占 JSON 的高度。
-        setMessage('大文档模式 · ' + st.rows.toLocaleString('zh-CN') + ' 行 · ' +
-                   st.elapsed + 'ms · 虚拟化渲染', 'ok');
+        refreshBigStatus();
         msgEl.title = '虚拟化渲染：只绘制视口附近的行，' + st.rows.toLocaleString('zh-CN') +
                       ' 行也能立刻出现、滚动流畅；支持折叠、搜索、行号与括号匹配';
       }
@@ -614,7 +810,7 @@
   });
 
   /* ---------------- 拖入文件 ----------------
-     输入栏在大文档模式下会收起（.is-solo），所以拖放不能只绑在它上面，
+     输入栏可能被用户收起（.is-solo），所以拖放不能只绑在它上面，
      否则「收起输入栏后拖文件进去」会没反应。两条面板都接。 */
 
   var dropZones = [panelInput, $('panelOutput')].filter(Boolean);
@@ -996,24 +1192,23 @@
 
   /* ---------------- 输入栏收起 / 大文档最大化 ---------------- */
 
-  /* 两件互相独立但常一起生效的事：
+  /* 两件互相独立的事：
        is-solo    —— 左栏与分隔条让位，输出独占整宽（JSON 区从半宽变整宽）；
        is-bigdoc  —— 大文档正在展示，顶栏、外边距、底部状态带一起收窄。
-     自动判定（大文档 → 收起）与手动开关共存：用户点过一次按钮就固定为手动，
-     不再被内容切换来回夺走控制权。 */
+     输入栏显隐**只由 is-solo 决定**，来源只有两个：用户点按钮，或全屏的默认沉浸。
+     大文档不再自动收起它 —— 大文档恰恰更需要「左边原文、右边结果」对照着看，
+     把输入栏抢走是反直觉的（用户明确反馈过「不要默认」）。 */
   var btnSolo = $('btnSolo');
   var soloLabel = $('soloLabel');
-  /** null = 跟随内容自动；true / false = 用户手动指定 */
+  /** null = 跟随自动（仅全屏）；true / false = 用户手动指定，手动永远优先 */
   var soloMode = null;
-  /** 自动判定结果：大文档展示时为 true */
-  var autoSolo = false;
 
   function soloWanted() {
     // 用户手动指定优先——这样全屏下点「显示输入」也有效（之前全屏恒收起）
     if (soloMode !== null) return soloMode;
     // 全屏默认沉浸：先把输入栏收起来，但不再锁死，随时可以唤回
     if (focusActive()) return true;
-    return autoSolo;
+    return false;
   }
 
   function applySoloState() {
@@ -1033,11 +1228,10 @@
     });
   }
 
-  /** 大文档模式开关：收窄顶栏与底部状态带，并自动收起输入栏 */
+  /** 大文档模式开关：只收窄顶栏与底部状态带。
+   *  刻意**不动**输入栏 —— 原因见上面 soloWanted() 的注释。 */
   function setBigDocMode(on) {
-    autoSolo = !!on;
     document.body.classList.toggle('is-bigdoc', !!on);
-    applySoloState();
   }
 
   /* ---------------- 设置同步 ---------------- */
@@ -1066,6 +1260,7 @@
         dark: resolvedTheme() === 'dark'
       });
     }
+    syncBigToolbar();
   }
 
   NS.loadSettings().then(function (loaded) {

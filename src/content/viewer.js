@@ -165,6 +165,16 @@
     '.jf-big[data-theme="dark"]{',
     TOKEN_DARK,
     '}',
+    /* 大文档视图的工具条是 #bigView 的**兄弟节点**（刻意放在它外面：CodeMirror
+       要自己量可视区尺寸，不能去动它的布局），因此取不到 .jf-big 上的 token。
+       这里补同一份定义 —— 配色定义只有一份，两边不能分叉。 */
+    '.jf-bigtoolbar{',
+    TOKEN_LIGHT,
+    '  font-family:' + MONO_FONT + ';font-size:' + DEFAULT_FONT_SIZE + 'px;',
+    '  color:var(--jf-text);background:var(--jf-bg-alt);box-sizing:border-box;}',
+    '.jf-bigtoolbar[data-theme="dark"]{',
+    TOKEN_DARK,
+    '}',
     '.jf-root *,.jf-root *::before,.jf-root *::after{box-sizing:border-box;}',
     /* macOS 深色下用灰阶抗锯齿：浅色文字在深底上默认会显得偏重、发糊。
        其它平台保持 auto，Windows 的 ClearType 比灰阶更清晰。 */
@@ -1272,4 +1282,12 @@
    */
   NS.installViewerStyles = installStyles;
   NS.VIEWER_CSS = VIEWER_CSS;
+
+  /**
+   * 取一个内置图标元素（copy / download / theme ...）。
+   * 供编辑页给「大文档视图工具条」用同一套图标，免得两处各画一份 SVG。
+   */
+  NS.jfIcon = function (name) {
+    return ICONS[name] ? svgIcon(ICONS[name]) : null;
+  };
 })();

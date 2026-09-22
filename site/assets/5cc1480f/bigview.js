@@ -376,6 +376,8 @@
         exact: state.exact,
         elapsed: state.elapsed,
         line: view ? view.state.doc.lines : 0,
+        // 工具条要拿当前是「美化」还是「压缩」来定按钮文案，别让调用方自己猜
+        compact: !!state.compact,
       };
     }
 
