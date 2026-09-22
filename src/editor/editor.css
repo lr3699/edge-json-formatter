@@ -454,7 +454,10 @@ kbd {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 7px 14px;
+  /* 纵向留白取 4px 而非 7px：右栏状态带里的胶囊本身高约 25px，7px 上下留白会
+     把右栏底条撑到 40px，而左栏只有 34px（min-height）——两栏底部就不等高。
+     4px 时左右两栏都落在 min-height 34px 上。 */
+  padding: 4px 14px;
   border-top: 1px solid var(--border-soft);
   background: var(--panel-2);
   font-size: 12px;
@@ -462,6 +465,17 @@ kbd {
 }
 
 .muted { color: var(--muted); white-space: nowrap; }
+
+/* 输出栏状态带中间那段：由树视图 .jf-status 镜像而来，可能很长（路径 + 统计） */
+.foot-info {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11.5px;
+}
 
 .msg {
   min-width: 0;
@@ -834,18 +848,29 @@ kbd {
 html.is-fullscreen { height: 100%; background: var(--page); }
 html.is-fullscreen body { height: 100%; }
 
-/* 沉浸阅读：左栏与分隔条让位，输出区独占整个工作区。
-   放在窄屏媒体查询之后，靠 .workspace.is-focus 的更高权重覆盖其列定义。 */
-.workspace.is-focus,
+/* 输入栏收起 / 沉浸阅读：左栏与分隔条让位，输出区独占整个工作区。
+   放在窄屏媒体查询之后，靠 .workspace.is-solo 的更高权重覆盖其列定义。
+
+   注意这里**不再**让 .is-focus（全屏）单独隐藏输入栏。
+   全屏下「默认收起」由 JS 的 soloWanted() 决定，用户仍可点「显示输入」唤回；
+   旧写法里 .is-focus 无条件 display:none，那个按钮在全屏下就是个死键。 */
 .workspace.is-solo {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
 }
 
-.workspace.is-focus > .panel-input,
-.workspace.is-focus > .splitter,
 .workspace.is-solo > .panel-input,
 .workspace.is-solo > .splitter { display: none; }
+
+/* 全屏且输入栏未收起时，仍需压过窄屏媒体查询里的堆叠列定义 */
+.workspace.is-focus:not(.is-solo) {
+  grid-template-columns: var(--split) 12px minmax(0, 1fr);
+}
+
+/* 树视图自带一条 .jf-status（路径 + 节点数/深度/源码大小）。本页已有面板自己的
+   状态带，两条叠在右栏底部会白占一行、且与左栏不等高。这里隐掉它，
+   文字交给 editor.js 镜像进状态带的 #viewInfo；树里每行的键名点击仍能复制路径。 */
+#panelOutput .jf-status { display: none; }
 
 /* ------------------------------------------------ 大文档模式：空间全给 JSON
    .is-solo 只是「输入栏收起」，.is-bigdoc 是「大文档正在展示」——

@@ -12,9 +12,9 @@
   <meta property="og:description" content="双栏 JSON 工作台：左栏粘贴原文、右栏实时预览，可折叠树、搜索、JSONPath 复制，纯本地运行。">
   <meta property="og:image" content="https://lr3699.github.io/json-formatter-pro/og-image.png">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="icon" href="favicon.png?v=333082f5" type="image/png">
-  <link rel="stylesheet" href="assets/333082f5/editor.css">
-  <link rel="stylesheet" href="app.css?v=333082f5">
+  <link rel="icon" href="favicon.png?v=b9262e1d" type="image/png">
+  <link rel="stylesheet" href="assets/b9262e1d/editor.css">
+  <link rel="stylesheet" href="app.css?v=b9262e1d">
 </head>
 <body>
   <div class="aurora" aria-hidden="true">
@@ -177,6 +177,9 @@
         <span id="statusPill" class="pill">
           <span class="pill-dot"></span><span id="pillText">就绪</span>
         </span>
+        <!-- 树视图自带的状态带（路径 / 节点数 / 深度 / 源码大小）会镜像到这里，
+             避免右栏底部叠成两条、左右两栏不等高。 -->
+        <span id="viewInfo" class="foot-info"></span>
         <span id="msg" class="msg"></span>
       </footer>
     </section>
@@ -207,13 +210,13 @@
     </section>
   </aside>
 
-  <script src="assets/333082f5/codemirror.bundle.js"></script>
-  <script src="assets/333082f5/defaults.js"></script>
-  <script src="assets/web-storage.js?v=333082f5"></script>
-  <script src="assets/333082f5/json-parser.js"></script>
-  <script src="assets/333082f5/viewer.js"></script>
-  <script src="assets/333082f5/bigview.js"></script>
-  <script src="assets/333082f5/editor.js"></script>
-  <script src="assets/web-settings.js?v=333082f5"></script>
+  <script src="assets/b9262e1d/codemirror.bundle.js"></script>
+  <script src="assets/b9262e1d/defaults.js"></script>
+  <script src="assets/web-storage.js?v=b9262e1d"></script>
+  <script src="assets/b9262e1d/json-parser.js"></script>
+  <script src="assets/b9262e1d/viewer.js"></script>
+  <script src="assets/b9262e1d/bigview.js"></script>
+  <script src="assets/b9262e1d/editor.js"></script>
+  <script src="assets/web-settings.js?v=b9262e1d"></script>
 </body>
 </html>

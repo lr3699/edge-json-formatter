@@ -543,21 +543,40 @@ def main():
               el.dispatchEvent(new InputEvent('input',{inputType:'insertFromPaste',bubbles:true}));
               await new Promise(function(r){setTimeout(r,900);});
               var ws=document.querySelector('.workspace');
+              var jfs=document.querySelector('#viewer .jf-status');
+              var fi=box('#panelInput .panel-foot');
+              var fo=box('#panelOutput .panel-foot');
               return JSON.stringify({
                 solo: ws.classList.contains('is-solo'),
                 bigdoc: document.body.classList.contains('is-bigdoc'),
                 inputH: box('#panelInput') ? box('#panelInput').h : -1,
                 topbarH: box('.topbar').h,
+                footInH: fi ? fi.h : -1,
+                footOutH: fo ? fo.h : -1,
+                jfStatusHidden: jfs ? getComputedStyle(jfs).display === 'none' : null,
+                viewInfo: (document.getElementById('viewInfo')||{}).textContent,
                 errs: window.__errs||[]
               });
             })()
         """) or "{}")
-        print("     小文档：solo=%s bigdoc=%s 输入栏高=%s 顶栏=%s"
-              % (s3.get("solo"), s3.get("bigdoc"), s3.get("inputH"), s3.get("topbarH")))
+        print("     小文档：solo=%s bigdoc=%s 输入栏高=%s 顶栏=%s 底部带 左=%s/右=%s"
+              % (s3.get("solo"), s3.get("bigdoc"), s3.get("inputH"), s3.get("topbarH"),
+                 s3.get("footInH"), s3.get("footOutH")))
+        print("             jf-status 隐藏=%s  主状态带镜像=%r"
+              % (s3.get("jfStatusHidden"), s3.get("viewInfo")))
         check("小文档不触发最大化布局", s3.get("solo") is False and s3.get("bigdoc") is False,
               "solo=%s bigdoc=%s" % (s3.get("solo"), s3.get("bigdoc")))
         check("小文档下输入栏在位", (s3.get("inputH") or 0) > 0, "h=%s" % s3.get("inputH"))
         check("小文档下顶栏保持原高度", (s3.get("topbarH") or 0) >= 50, "h=%s" % s3.get("topbarH"))
+        # 右栏底部曾同时叠着树视图的 .jf-status 与面板的 .panel-foot，
+        # 比左栏多一行（实测 77px vs 34px）。这两条断言看着它不再回来。
+        check("左右两栏底部状态带等高（不再叠两条）",
+              (s3.get("footInH") or -1) == (s3.get("footOutH") or -2) and (s3.get("footInH") or 0) > 0,
+              "左 %s / 右 %s" % (s3.get("footInH"), s3.get("footOutH")))
+        check("树视图自带状态带已隐藏", s3.get("jfStatusHidden") is True,
+              "display none=%s" % s3.get("jfStatusHidden"))
+        check("节点统计已镜像进主状态带（信息没丢）",
+              bool((s3.get("viewInfo") or "").strip()), "viewInfo=%r" % s3.get("viewInfo"))
 
         # 9b) 再粘贴大文档（同一页面内，不重新加载）
         r9 = json.loads(ev(client, r"""
@@ -593,7 +612,8 @@ def main():
                 msgH: Math.round(msg.getBoundingClientRect().height),
                 lh: lh,
                 pressed: btn.getAttribute('aria-pressed'),
-                label: document.getElementById('soloLabel').textContent
+                label: document.getElementById('soloLabel').textContent,
+                viewInfo: (document.getElementById('viewInfo')||{}).textContent
               };
               btn.click();
               await new Promise(function(r){setTimeout(r,350);});
@@ -638,6 +658,10 @@ def main():
         check("按钮状态与文案同步",
               s2.get("pressed") == "false" and s2.get("label") == "输入栏",
               "%s / %s" % (s2.get("pressed"), s2.get("label")))
+        # 大文档走 CodeMirror 宿主，没有树视图，镜像文字必须清掉，
+        # 否则左栏的节点统计会「粘」在右栏底部。
+        check("大文档下树视图统计已清空",
+              not (s1.get("viewInfo") or "").strip(), "viewInfo=%r" % s1.get("viewInfo"))
         check("布局切换无 JS 报错", not r9.get("errs") and not s3.get("errs"),
               str((r9.get("errs") or []) + (s3.get("errs") or []))[:200])
 

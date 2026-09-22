@@ -285,6 +285,70 @@
     viewerHost.hidden = false;
   }
 
+  /* ---------------- 树视图状态带 → 面板状态带（镜像） ----------------
+
+     树视图（viewer.js）自带一条 .jf-status，内容是「路径 + N 个节点 · 深度 · 源码大小」。
+     本页的 .panel-foot 里也有状态胶囊，两条叠在右栏底部会白占一行，而且左栏只有一条，
+     左右两栏高度就不相等（实测右栏底部 77px vs 左栏 34px）。
+
+     处理办法：用 CSS 隐掉 .jf-status，把它的文字镜像到状态带的 #viewInfo 里，
+     于是左右两栏都只剩一条 34px 的状态带，节点统计也没有丢。
+     路径的复制入口不受影响——树里每一行的键名点击即可复制该行路径。 */
+
+  var viewInfoEl = $('viewInfo');
+  /** 上一次镜像的文字，避免 MutationObserver 反复写同一个值 */
+  var infoText = '';
+  /** 当前被观察的 .jf-status 节点 */
+  var statusNode = null;
+  var statusObs = null;
+
+  function pushViewInfo() {
+    if (!viewInfoEl) return;
+    var t = statusNode ? (statusNode.textContent || '').replace(/\s+/g, ' ').trim() : '';
+    if (t === infoText) return;
+    infoText = t;
+    viewInfoEl.textContent = t;
+    viewInfoEl.title = t;
+  }
+
+  /**
+   * 找到当前的 .jf-status 并挂上观察。查看器每次重建都会产生新的 .jf-status 节点，
+   * 所以这里做「节点身份」比较：还是同一个就直接返回，不做任何多余工作。
+   * 观察范围只到 .jf-status 这一层，不观察整棵树 —— 大 JSON 建行时会产生几万条
+   * mutation 记录，全量观察会白白拖慢渲染。
+   */
+  function attachStatusMirror() {
+    var node = viewerHost.querySelector('.jf-status');
+    if (node === statusNode) { pushViewInfo(); return; }
+    if (statusObs) { statusObs.disconnect(); statusObs = null; }
+    statusNode = node;
+    // 找不到节点时不要先把 infoText 置空（同 clearViewInfo 里的坑），
+    // 直接交给 pushViewInfo 去算：'' !== 旧值 才会真的写 DOM。
+    if (!node) { pushViewInfo(); return; }
+    if (typeof MutationObserver === 'function') {
+      statusObs = new MutationObserver(pushViewInfo);
+      statusObs.observe(node, { childList: true, subtree: true, characterData: true });
+    }
+    pushViewInfo();
+  }
+
+  /** 输出区换用别的视图（大文档 / 欢迎页）时，清掉树视图的统计文字。
+
+      注意不要把 infoText 先置空再调 pushViewInfo：pushViewInfo 靠
+      「算出来的文字 === infoText」判断是否需要写 DOM，先置空会让它认为
+      「没变化」而直接 return，DOM 里那段文字就永远清不掉了。 */
+  function clearViewInfo() {
+    statusNode = null;
+    if (statusObs) { statusObs.disconnect(); statusObs = null; }
+    pushViewInfo();
+  }
+
+  // .jf-root 被整体替换时（查看器重建）重新找一次 .jf-status。
+  // 只观察 #viewer 的直接子节点，开销可忽略。
+  if (typeof MutationObserver === 'function') {
+    new MutationObserver(attachStatusMirror).observe(viewerHost, { childList: true });
+  }
+
   /* ---------------- 大文档视图（CodeMirror 6 虚拟化） ---------------- */
 
   var bigHost = $('bigView');
@@ -355,6 +419,7 @@
     // 先让宿主可见、并切到「单栏 + 收窄」布局，再创建 CodeMirror ——
     // CM 会量可视区尺寸，在 display:none 或半宽状态下建实例会量错。
     viewerHost.hidden = true;
+    clearViewInfo();
     welcomeEl.hidden = true;
     bigHost.hidden = false;
     setBigDocMode(true);
@@ -426,6 +491,7 @@
       lastRendered = null;
       setBigDocMode(false);
       if (viewer) showOutput(false);
+      clearViewInfo();
       setPill('', '就绪');
       setMessage('');
       return;
@@ -470,6 +536,8 @@
       setPill('is-err', '格式有误');
       setMessage('右栏已标出出错的行号、列号与位置', 'err');
     }
+    // 渲染完成后把树视图状态带的文字镜像到面板状态带（节点数 / 深度 / 源码大小）
+    attachStatusMirror();
   }
 
   function scheduleFormat(fast) {
@@ -870,6 +938,9 @@
     var active = !!on;
     rootEl.classList.toggle('is-fullscreen', active);
     workspaceEl.classList.toggle('is-focus', active);
+    // 全屏会改变 soloWanted() 的默认值（全屏默认收起输入栏），
+    // 重新求值一次，让按钮状态和实际布局保持一致。
+    applySoloState();
     if (fsLabel) fsLabel.textContent = active ? '退出全屏' : '全屏';
     if (btnFullscreen) {
       btnFullscreen.setAttribute('aria-pressed', active ? 'true' : 'false');
@@ -938,7 +1009,11 @@
   var autoSolo = false;
 
   function soloWanted() {
-    return soloMode === null ? autoSolo : soloMode;
+    // 用户手动指定优先——这样全屏下点「显示输入」也有效（之前全屏恒收起）
+    if (soloMode !== null) return soloMode;
+    // 全屏默认沉浸：先把输入栏收起来，但不再锁死，随时可以唤回
+    if (focusActive()) return true;
+    return autoSolo;
   }
 
   function applySoloState() {
