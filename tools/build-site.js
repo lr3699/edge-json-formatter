@@ -70,6 +70,7 @@ const HOOKS = [
 const FILES = [
   ['shared/defaults.js', 'defaults.js'],
   ['content/json-parser.js', 'json-parser.js'],
+  ['content/rowmodel.js', 'rowmodel.js'],
   ['content/viewer.js', 'viewer.js'],
   ['content/bigview.js', 'bigview.js'],
   // CodeMirror 6 的本地 bundle 也当成构建产物，直接读字节（不参与钩子注入）
@@ -79,8 +80,8 @@ const FILES = [
 ];
 
 /** 需要按文本读、可能注入钩子的产物（bundle 是几十万行压缩码，只读字节） */
-const TEXT_PRODUCTS = new Set(['defaults.js', 'json-parser.js', 'viewer.js',
-                               'bigview.js', 'editor.js', 'editor.css']);
+const TEXT_PRODUCTS = new Set(['defaults.js', 'json-parser.js', 'rowmodel.js',
+                               'viewer.js', 'bigview.js', 'editor.js', 'editor.css']);
 
 /** 站点自有、不进构建目录，只加 ?v= 查询串的资源 */
 const STATIC_ASSETS = ['web-storage.js', 'web-settings.js', 'style.css', 'app.css',

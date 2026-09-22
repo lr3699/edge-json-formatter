@@ -29,6 +29,7 @@
       "js": [
         "src/shared/defaults.js",
         "src/content/json-parser.js",
+        "src/content/rowmodel.js",
         "src/content/viewer.js",
         "src/content/content.js"
       ],

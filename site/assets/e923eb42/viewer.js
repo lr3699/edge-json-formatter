@@ -55,20 +55,31 @@
   var LINE_RATIO = 1.7;
 
   /**
-   * 分批渲染上限（大 JSON 卡死修复）：
-   *  - MAX_CHUNK：展开 / 「加载更多」一次同步建多少行，超出部分交给
-   *    「还有 N 项」哨兵 + 后台分帧续建；
-   *  - PAINT_ROWS / FILL_ROWS：首帧同步建多少行立刻上屏、之后每帧补建多少行。
-   *    实测 11MB JSON 一次性建 5700 行（4 万+ 节点）样式重算 + 布局近 500ms，
-   *    主线程整段卡死——分帧后首屏 ~50ms 即可见，其余行在后台补齐，期间
-   *    浏览器每帧都能响应输入与滚动。
+   * 虚拟化渲染参数（大 JSON 高性能的核心）。
+   *
+   * 树视图原来是「一个节点一行真实 DOM」：22MB 文档 = 36 万行 DOM，浏览器必崩
+   * ——这正是以前必须有 TOTAL_ROWS = 6000 上限、以及「超过 600KB 就切大文档
+   * 视图」的原因（拿砍行数来保命）。
+   *
+   * 现在换成业界一致的做法（Dadroit / JSON Hero / svelte-jsoneditor 同思路）：
+   * 把树摊平成一张**可见行表**（content/rowmodel.js），用一个 spacer 撑出总高度，
+   * 只把视口内的那几十行挂成 DOM。于是 DOM 行数与文档大小无关，折叠/展开只影响
+   * 行表长度与 spacer 高度，**不再需要任何行数上限**。
+   *
+   * 代价（明确记下来，不是遗漏）：
+   *  - 行高固定：长值不再自动折行，超出部分裁掉，全文靠悬停提示 + 点击复制；
+   *  - 跨行框选复制做不到（虚拟化列表的固有代价）；
+   *    复制走「点键复制路径 / 点值复制值 / 工具条复制整份」三条路。
    */
-  var MAX_CHUNK = 400;
-  var PAINT_ROWS = 400;
-  var FILL_ROWS = 350;
-  /** 一次渲染允许存在的总行数上限。分帧只解决「卡不卡」，不解决「该不该全建」：
-      11MB 全展开是十几万行 / 百万级节点，内存和滚动都会崩，超出部分走哨兵。 */
-  var TOTAL_ROWS = 6000;
+  /** 视口上下各多渲染几行，滚动时不至于露白 */
+  var OVERSCAN = 6;
+  /** 单行里最多渲染多少个字符，超出的部分靠悬停提示 + 点击复制拿全文 */
+  var VALUE_MAX = 512;
+  /** 「压缩」视图最多渲染多少字符（一整行几 MB 的文本，浏览器 shaping 会假死） */
+  var COMPACT_MAX = 2 * 1024 * 1024;
+  /** 视口上下留白，与旧版 .jf-body 的 padding 保持一致 */
+  var PAD_TOP = 14;
+  var PAD_BOTTOM = 80;
 
   /* ------------------------------------------------------------------ *
    * 样式
@@ -194,41 +205,58 @@
     '  color:var(--jf-accent);}',
 
 
-    /* ---------------- 正文 ---------------- */
-    '.jf-body{flex:1 1 auto;overflow:auto;padding:14px 18px 80px;background:var(--jf-bg);}',
+    /* ---------------- 正文（虚拟化：spacer + 视口窗口） ---------------- */
+    '.jf-body{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;background:var(--jf-bg);',
+    '  position:relative;}',
     '.jf-body::-webkit-scrollbar{width:13px;height:13px;}',
     '.jf-body::-webkit-scrollbar-thumb{background:#d4d8dd;border:3px solid var(--jf-bg);border-radius:8px;}',
     '.jf-body::-webkit-scrollbar-thumb:hover{background:#bcc2c9;}',
     '.jf-root[data-theme="dark"] .jf-body::-webkit-scrollbar-thumb{background:#39404a;}',
 
-    '.jf-row{display:flex;align-items:flex-start;white-space:pre-wrap;word-break:break-word;',
-    '  border-radius:4px;padding:0 3px;}',
-    '.jf-row:hover{background:var(--jf-bg-hover);}',
+    /* 撑高元素：高度 = 上下留白 + 行数 × 行高，决定滚动条长度；
+       窗口用 absolute + translateY 定位到视口那一段 —— 滚动只改 transform 与
+       窗口内容，spacer 高度不变，所以滚动条不会抖。 */
+    '.jf-sizer{position:relative;width:100%;}',
+    '.jf-window{position:absolute;top:0;left:0;right:0;padding:0 18px;}',
+
+    /* 一行 = 定高 + 不换行 + 溢出裁掉。
+       定高是虚拟化的前提：「第 i 行在哪儿、spacer 该多高」全靠行高算出来。
+       代价是长值不再自动折行，超出部分裁掉，全文交给悬停提示与点击复制。 */
+    '.jf-row{display:flex;align-items:flex-start;height:var(--jf-lh);',
+    '  line-height:var(--jf-lh);white-space:nowrap;overflow:hidden;border-radius:4px;',
+    '  padding-left:calc(3px + var(--jf-depth,0) * (var(--jf-indent) + 3px));',
+    '  padding-right:3px;',
+    /* 层级引导线：扁平行表没有嵌套容器可挂 border-left 了，改用一条
+       repeating-linear-gradient + background-size 裁剪：线在 2px、21px、40px…
+       （每层 19px = 缩进 16px + 间距 2px + 线宽 1px），裁剪宽度 = 层数 × 19px - 16px，
+       正好把「第 层数+1 条」及之后的线挡在元素外 —— 每一行只画自己需要的引导线，
+       零额外 DOM、零额外样式写入（只读 --jf-depth）。 */
+    '  background-image:repeating-linear-gradient(90deg,transparent 0 2px,',
+    '    var(--jf-guide) 2px 3px,transparent 3px 19px);',
+    '  background-repeat:no-repeat;',
+    '  background-size:max(0px,calc(var(--jf-depth,0) * (var(--jf-indent) + 3px) - 16px)) 100%;}',
+    '.jf-row:hover{background-color:var(--jf-bg-hover);}',
     '.jf-no{flex:0 0 auto;width:4em;padding-right:1.1em;text-align:right;color:var(--jf-muted);',
     /* 行号用整数 px + 与正文同一个行高变量：行号不再是 .86em 这种小数尺寸
        （14×.86 = 12.04px，落在分数设备像素上会发虚），也顺带修掉了行号
        与正文行高不一致导致的逐行错位。 */
     '  opacity:.6;user-select:none;font-size:12px;line-height:var(--jf-lh);background:var(--jf-bg);',
     '  position:relative;',
-    '  /* 行号要钉在查看器最左侧。不能用负 margin：flex 里首项的负 margin 会把',
-    '     后面的内容一起拖过去，正好抵消 .jf-children 的嵌套缩进，开了行号整棵树',
-    '     就变平了。用 relative + left 只挪行号自己，不影响兄弟元素布局。每层实际',
-    '     横向开销 = --jf-indent + .jf-children 的 margin-left(2px) + 左边框(1px)，',
-    '     再补上 .jf-row 自身的 padding-left(3px)。 */',
-    '  left:calc(var(--jf-indent) * var(--jf-depth,0) * -1 - var(--jf-depth,0) * 3px - 3px);}',
-    '.jf-content{flex:1 1 auto;min-width:0;}',
+    /* 行号要钉在查看器最左侧一列，不随层级往右漂。扁平行表里缩进做在行的
+       padding-left 上，所以这里把 padding 那一段用 relative 偏移抵消掉：
+       行内水平开销 = 3px + 层数 × 19px，偏移 -(层数 × 19px) - 3px 之后，
+       任何层级的行号都落在同一个 x 上。用 relative + left 而不是负 margin：
+       flex 里首项的负 margin 会把后面的内容一起拖过去，正好抵消缩进。 */
+    '  left:calc(var(--jf-depth,0) * (var(--jf-indent) + 3px) * -1 - 3px);}',
+    '.jf-content{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;',
+    '  white-space:nowrap;}',
 
-    /* 折叠子层：用嵌套容器 + 左侧引导线表达层级 */
-    '.jf-children{padding-left:var(--jf-indent);border-left:1px solid var(--jf-guide);',
-    '  margin-left:2px;}',
-    '.jf-children-collapsed{display:none;}',
-
-    /* 压缩显示：不改动树形 DOM，只靠 CSS 把嵌套结构塌缩成单行。
-       大 JSON 点「压缩」时零节点重建，几十万节点也能瞬间切换。 */
-    '.jf-compact .jf-row{display:inline;padding:0;}',
-    '.jf-compact .jf-children{display:inline;padding-left:0;border-left:0;margin-left:0;}',
-    '.jf-compact .jf-no,.jf-compact .jf-toggle,.jf-compact .jf-summary{display:none;}',
-    '.jf-compact .jf-row:hover{background:none;}',
+    /* 「压缩」视图：直接给紧凑序列化文本。
+       旧版是纯 CSS 把嵌套结构塌缩成一行（DOM 不动），但虚拟化下行表里
+       只有视口那几十行，塌缩出来的也只是一小段，语义上已经不成立了。 */
+    '.jf-ctext{margin:0;padding:14px 18px 80px;font:inherit;color:var(--jf-text);',
+    '  white-space:pre-wrap;word-break:break-all;}',
+    '.jf-ctext-note{color:var(--jf-accent);font-size:12.5px;margin:14px 0 0;}',
 
     /* 键与括号之间的圆角方框折叠标记 */
     '.jf-toggle{display:inline-flex;align-items:center;justify-content:center;',
@@ -239,10 +267,9 @@
 
     '.jf-key{color:var(--jf-key);font-weight:600;cursor:pointer;border-radius:3px;}',
     '.jf-key:hover{background:var(--jf-key-bg,rgba(146,39,143,.09));}',
+    /* 值：点一下复制。长值在行内被裁掉（见 .jf-content），全文看悬停提示 */
+    '.jf-val{cursor:pointer;}',
     '.jf-str{color:var(--jf-str);}',
-    '.jf-str-more{color:var(--jf-accent);cursor:pointer;font-style:italic;',
-    '  user-select:none;margin-left:4px;}',
-    '.jf-str-more:hover{text-decoration:underline;}',
     '.jf-num{color:var(--jf-num);}',
     '.jf-bool{color:var(--jf-bool);}',
     '.jf-null{color:var(--jf-null);font-style:italic;}',
@@ -268,7 +295,7 @@
     '.jf-toast-show{opacity:1;transform:translateX(-50%) translateY(0);}',
 
     /* ---------------- 错误卡片 ---------------- */
-    '.jf-error{margin:16px 0;padding:18px 20px;border:1px solid var(--jf-border);',
+    '.jf-error{margin:16px 18px;padding:18px 20px;border:1px solid var(--jf-border);',
     '  border-left:3px solid #e85050;border-radius:10px;background:var(--jf-bg-alt);max-width:860px;',
     '  font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei UI","Microsoft YaHei",' +
     '"PingFang SC","Noto Sans SC",sans-serif;}',
@@ -374,16 +401,23 @@
 
     var body, toolbar, statusBar, toastEl, pathLabel, statsLabel;
 
-    /**
-     * 渲染会话：可恢复的深度优先遍历状态。
-     * stack 里是待填充的容器帧，budget 是本帧还能建多少行，timer 是续建定时器。
-     * numbering=true 表示「建行时直接按文档序赋行号」（整树重渲染）；
-     * 展开/折叠只动局部，行号统一交给 renumber()，此时为 false。
-     */
-    var session = { stack: [], lines: 0, budget: 0, total: 0, timer: null,
-                    numbering: true, late: false };
-    var renderToken = 0;
-    /** 输出文本缓存：outputText() 的结果按「模式+缩进」缓存，避免每次统计都全树序列化 */
+    /** 可见行表（rowmodel.js）。null 表示当前没有可渲染的树（错误卡 / 空内容 / 压缩视图） */
+    var model = null;
+    /** 撑高元素：高度 = 行数 × 行高，决定滚动条长度 */
+    var sizerEl = null;
+    /** 视口窗口：只装 [view.first, view.last) 这段行 */
+    var winEl = null;
+    /** 当前已经挂在 DOM 上的行区间，滚动时用它判断要不要重画 */
+    var view = { first: -1, last: -1 };
+    /** 行高（px）。与写进 --jf-lh 的算法同源，改字号时一起更新 */
+    var ROW_H = Math.round(DEFAULT_FONT_SIZE * LINE_RATIO);
+    /** 滚动合并用的 rAF 句柄 */
+    var rafId = 0;
+    /** 观察视口尺寸变化（窗口缩放 / 工具条换行） */
+    var resObs = null;
+    /** true = 现在建出来的行属于「补画」（滚动/折叠重画），不打入场动效 */
+    var lateRows = false;
+    /** 输出文本缓存：outputText() 的结果按「模式+缩进+树版本」缓存，避免每次统计都全树序列化 */
     var outCache = { key: null, text: '' };
 
     rootEl.classList.add('jf-root');
@@ -407,6 +441,21 @@
     rootEl.appendChild(body);
     rootEl.appendChild(statusBar);
     rootEl.appendChild(toastEl);
+
+    /* 滚动只重画窗口，不重建行表；用 rAF 合并，一帧最多画一次。
+       监听挂在 body 上（只挂一次），窗口里那些行元素随窗口整体换掉，
+       不需要（也不能）逐行挂监听 —— 那是虚拟化列表卡顿的常见来源。 */
+    body.addEventListener('scroll', scheduleWindow, { passive: true });
+    body.addEventListener('click', onBodyClick);
+    if (typeof ResizeObserver === 'function') {
+      resObs = new ResizeObserver(function () {
+        layout();
+        updateWindow(true);
+      });
+      resObs.observe(body);
+    } else if (window.addEventListener) {
+      window.addEventListener('resize', function () { layout(); updateWindow(true); });
+    }
 
     var THEME_NAMES = { auto: '跟随系统', light: '浅色', dark: '深色' };
     var THEME_ORDER = ['auto', 'light', 'dark'];
@@ -467,8 +516,10 @@
         state.outMode = state.outMode === 'compact' ? 'pretty' : 'compact';
         outCache.key = null;   // 输出模式变了，序列化缓存失效
         syncToolbar();
-        // 只切 CSS class，不重建 DOM：大 JSON 几十万节点也能瞬间切换
-        body.classList.toggle('jf-compact', state.outMode === 'compact');
+        /* 必须重渲染。旧版这一步只切一个 CSS class（靠 CSS 把嵌套 DOM 塌缩成
+           一行），虚拟化之后树里只有视口那几十行，CSS 已经表达不了「整篇压缩成
+           一行」这件事了，改由 render() 换成紧凑文本视图。 */
+        render();
       }, 'btn-solid');
       toolbar.appendChild(tb.mode);
 
@@ -537,6 +588,11 @@
       rootEl.style.setProperty('--jf-lh', Math.round(size * LINE_RATIO) + 'px');
       // 取消「等宽字体」时换成正文字体栈：同字号下字形更大、笔画更实
       rootEl.style.fontFamily = opts.monoFont === false ? PROSE_FONT : MONO_FONT;
+      // 行高就是虚拟化的「坐标系」：字号一改，行高、spacer 高度、窗口位置全要重算
+      if (model) {
+        layout();
+        updateWindow(true);
+      }
     }
 
     function persist(patch) {
@@ -557,64 +613,28 @@
     }
 
     /**
-     * 超长字符串值：默认折叠 + 惰性展开，绝不一次性渲染全文。
+     * 值文本：单行渲染，超过 VALUE_MAX 就截断。
      *
-     * 这是「压缩 / 转义后大 JSON 卡死」的根因修复：压缩 / 转义后的内容往往
-     * 是一个几 MB 的字符串值，如果一次性渲染全文（无论单个节点还是切成几千
-     * 块），浏览器 shaping/layout 都会假死。正确做法是「惰性展开」：
-     *  - 默认只渲染前 STRING_PREVIEW 字符，末尾挂「… (N 字符) 点击展开」；
-     *  - 用户点「展开」才把全文分片渲染出来（块大小足够大，节点数可控）；
-     *  - 展开后点「收起」再折叠回预览。
-     * 这样转义 12MB 文本时，初始只产生 1 个文本节点 + 1 个折叠标记，
-     * 主线程零阻塞。
+     * 旧做法是「默认折叠 + 点开再分片渲染全文」，但虚拟化的前提是**定高行**，
+     * 一行里塞不下多行文本，所以那条路走不通了。更要紧的是：一个几 MB 的字符串
+     * 值哪怕只是塞进一个 text node，浏览器的 shaping 也会假死——所以这里连
+     * text node 都只放前 VALUE_MAX 个字符，全文留给「点击复制」和悬停提示。
      */
-    var STRING_PREVIEW = 1024;
-    var STRING_CHUNK = 8192;
     function appendValueText(container, node) {
       var text = valueText(node);
-      if (text.length <= STRING_PREVIEW) {
+      if (text.length <= VALUE_MAX) {
         container.appendChild(document.createTextNode(text));
         return;
       }
+      container.appendChild(document.createTextNode(text.slice(0, VALUE_MAX) + '…'));
+    }
 
-      // 折叠态：预览 + 展开标记
-      var preview = el('span', 'jf-str-trunc');
-      preview.appendChild(document.createTextNode(text.slice(0, STRING_PREVIEW)));
-      var more = el('span', 'jf-str-more');
-      more.textContent = '… (' + text.length.toLocaleString('zh-CN') + ' 字符，点击展开)';
-      more.title = '点击展开完整内容';
-      preview.appendChild(more);
-      container.appendChild(preview);
-
-      var expanded = false;
-      var expandToggle = function () {
-        expanded = !expanded;
-        if (expanded) {
-          // 惰性展开：全文分片渲染（块够大，节点数可控）
-          preview.textContent = '';
-          for (var i = 0; i < text.length; i += STRING_CHUNK) {
-            preview.appendChild(document.createTextNode(text.slice(i, i + STRING_CHUNK)));
-          }
-          var less = el('span', 'jf-str-more');
-          less.textContent = ' … (点击收起)';
-          preview.appendChild(less);
-        } else {
-          // 收起：回到预览态
-          preview.textContent = '';
-          preview.appendChild(document.createTextNode(text.slice(0, STRING_PREVIEW)));
-          var m2 = el('span', 'jf-str-more');
-          m2.textContent = '… (' + text.length.toLocaleString('zh-CN') + ' 字符，点击展开)';
-          m2.title = '点击展开完整内容';
-          preview.appendChild(m2);
-        }
-      };
-      more.addEventListener('click', function (e) { e.stopPropagation(); expandToggle(); });
-      preview.addEventListener('click', function (e) {
-        // 点击「收起」标记时折叠
-        if (expanded && e.target.classList && e.target.classList.contains('jf-str-more')) {
-          e.stopPropagation(); expandToggle();
-        }
-      });
+    /** 值的悬停提示：短值只提示「点击复制」，长值顺带给出开头一截 */
+    function valueTip(node) {
+      var text = valueText(node);
+      if (text.length <= VALUE_MAX) return '点击复制值';
+      return '点击复制值（共 ' + text.length.toLocaleString('zh-CN') + ' 字符，行内已截断）\n' +
+        '—— 开头 1000 字符 ——\n' + text.slice(0, 1000) + '…';
     }
 
     function nodeValueClass(node) {
@@ -636,22 +656,130 @@
       return m === 0 ? '[]' : '… ' + m + ' 项';
     }
 
-    /* ---------------- 渲染 ---------------- */
+    /* ---------------- 渲染（虚拟化窗口） ---------------- */
+
+    /**
+     * 显示顺序下的子节点取值器。
+     *
+     * 「按键排序」是用户可见设置，但排序结果必须缓存：不缓存的话每次摊平
+     * （首次渲染 / 每次展开 / 每次折叠重建）都要对每个对象重新 slice + sort，
+     * 一个 20 万键的对象会被排上几十遍。树是不可变的（查看器不编辑 JSON），
+     * 所以缓存一次就够。
+     */
     function orderedEntries(node) {
       if (!opts.sortKeys) return node.entries;
-      return node.entries.slice().sort(function (a, b) {
-        return a.keyNode.value.localeCompare(b.keyNode.value, 'zh-Hans-CN');
-      });
+      if (!node.__jfSorted) {
+        node.__jfSorted = node.entries.slice().sort(function (a, b) {
+          return a.keyNode.value.localeCompare(b.keyNode.value, 'zh-Hans-CN');
+        });
+      }
+      return node.__jfSorted;
     }
 
-    function makeRow(node, depth) {
+    /** 行表按显示顺序摊平；不排序时 child 就是解析器的默认取值器 */
+    function rowAccess() {
+      if (!opts.sortKeys) return null;
+      return {
+        count: function (node) {
+          if (node.type === 'object') return node.entries.length;
+          if (node.type === 'array') return node.items.length;
+          return 0;
+        },
+        child: function (node, i) {
+          if (node.type === 'object') return orderedEntries(node)[i].value;
+          return node.items[i];
+        }
+      };
+    }
+
+    /** 行高（px）：必须与 applyFont 写进 --jf-lh 的算法一致，否则窗口会错位 */
+    function rowHeight() {
+      var size = parseInt(opts.fontSize, 10);
+      if (!size || size < 8) size = DEFAULT_FONT_SIZE;
+      return Math.round(size * LINE_RATIO);
+    }
+
+    function isContainerNode(n) {
+      return n.type === 'object' || n.type === 'array';
+    }
+
+    /** 容器子节点个数（惰性 Proxy 的 length 是 O(1)，不会物化任何子节点） */
+    function childCountOf(n) {
+      if (n.type === 'object') return n.entries.length;
+      if (n.type === 'array') return n.items.length;
+      return 0;
+    }
+
+    /**
+     * 按行表长度铺开高度。
+     * 字号、行数、视口宽度任何一项变了都要走这里（sizer 高度决定滚动条长度）。
+     */
+    function layout() {
+      ROW_H = rowHeight();
+      if (!sizerEl || !model) return;
+      sizerEl.style.height =
+        (PAD_TOP + model.length * ROW_H + PAD_BOTTOM) + 'px';
+    }
+
+    /** 造一行 DOM。i = 行表下标（也是文档序行号 - 1） */
+    function buildRow(i) {
+      var node = model.nodeAt(i);
+      var close = model.isClose(i);
       var row = el('div', 'jf-row');
-      if (node) row.setAttribute('data-jf-node', String(node.id));
-      row.style.setProperty('--jf-depth', String(depth || 0));
+      row.setAttribute('data-i', String(i));
+      row.setAttribute('data-jf-node', String(node.id));
+      /* 首屏之后才建的行（滚动补画、折叠重画）不打入场动效的标记：
+         editor.css 里 .is-fresh 期间 rowIn 是 0.42s 的浮现，滚动时每帧换一批
+         行元素会变成整屏持续闪入 —— 这正是 jf-late 存在的意义。 */
+      if (lateRows) row.classList.add('jf-late');
+      /* 缩进、行号位置、层级引导线全部由这一个变量驱动（见 CSS 的 .jf-row） */
+      row.style.setProperty('--jf-depth', String(node.depth || 0));
+
       var gut = el('span', 'jf-no');
-      if (!opts.lineNumbers) gut.style.display = 'none';
+      if (opts.lineNumbers) gut.textContent = String(i + 1);
+      else gut.style.display = 'none';
       row.appendChild(gut);
+
+      var content = el('span', 'jf-content');
+      if (close) {
+        /* 闭行：`}` / `]`，末项后面要补逗号 */
+        content.appendChild(el('span', 'jf-punct', node.type === 'object' ? '}' : ']'));
+        if (!model.isLast(i)) content.appendChild(el('span', 'jf-punct', ','));
+      } else if (isContainerNode(node) && childCountOf(node) > 0) {
+        /* 非空容器开行：键 + 折叠标记 + 开括号（折叠时再补一段摘要） */
+        appendKey(content, node);
+        content.appendChild(makeToggle(node.expanded));
+        content.appendChild(el('span', 'jf-punct', node.type === 'object' ? '{' : '['));
+        if (!node.expanded) {
+          var sum = el('span', 'jf-summary', summaryText(node));
+          sum.title = '点击展开';
+          content.appendChild(sum);
+        }
+      } else {
+        /* 叶子，或空容器 */
+        appendKey(content, node);
+        if (isContainerNode(node)) {
+          content.appendChild(el('span', 'jf-punct', node.type === 'object' ? '{}' : '[]'));
+        } else {
+          var v = el('span', 'jf-val ' + nodeValueClass(node));
+          appendValueText(v, node);
+          v.title = valueTip(node);
+          content.appendChild(v);
+        }
+        if (!model.isLast(i)) content.appendChild(el('span', 'jf-punct', ','));
+      }
+      row.appendChild(content);
       return row;
+    }
+
+    /** 键 + 冒号。键的 title 是该节点的完整路径，点一下复制 */
+    function appendKey(content, node) {
+      if (!node.keyNode) return;
+      var span = el('span', 'jf-key');
+      span.textContent = keyText(node.keyNode);
+      span.title = '点击复制路径：' + model.pathOf(node);
+      content.appendChild(span);
+      content.appendChild(el('span', 'jf-punct', ': '));
     }
 
     function makeToggle(expanded) {
@@ -662,289 +790,139 @@
       return b;
     }
 
-    function setToggleIcon(btn, expanded) {
-      btn.title = expanded ? '折叠' : '展开';
-      btn.textContent = '';
-      btn.appendChild(toggleGlyph(expanded));
+    /** 取消待执行的窗口重画 */
+    function cancelWindow() {
+      if (rafId) {
+        if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafId);
+        rafId = 0;
+      }
     }
 
-    function makeKeySpan(keyNode, path) {
-      var span = el('span', 'jf-key');
-      span.textContent = keyText(keyNode);
-      var fullPath = path || keyNode.value;
-      span.title = '点击复制路径：' + fullPath;
-      span.addEventListener('click', function (e) {
-        e.stopPropagation();
-        doCopy(fullPath, '已复制路径：' + fullPath);
+    /**
+     * 重画视口窗口：把 [first, last) 这段行挂成 DOM，整段用 translateY 定位。
+     *
+     * 滚动只改 translateY 与窗口内容，spacer 高度不动 —— 所以滚动条长度稳定、
+     * 不会边滚边抖。窗口上下各多画 OVERSCAN 行，快速滚动时不会露白。
+     */
+    function updateWindow(force) {
+      if (!model || !winEl) return;
+      var vh = body.clientHeight || 0;
+      if (vh <= 0) vh = 600;                    // 还没量到尺寸时按一屏给个合理值
+      var first = Math.floor(body.scrollTop / ROW_H) - OVERSCAN;
+      if (first < 0) first = 0;
+      var last = first + Math.ceil(vh / ROW_H) + OVERSCAN * 2 + 1;
+      if (last > model.length) last = model.length;
+      if (!force && first === view.first && last === view.last) return;
+      view.first = first;
+      view.last = last;
+      winEl.style.transform = 'translateY(' + (PAD_TOP + first * ROW_H) + 'px)';
+      var frag = body.ownerDocument.createDocumentFragment();
+      for (var i = first; i < last; i++) frag.appendChild(buildRow(i));
+      winEl.textContent = '';
+      winEl.appendChild(frag);
+    }
+
+    /** 滚动 / 尺寸变化都走这里：一帧最多重画一次 */
+    function scheduleWindow() {
+      if (rafId) return;
+      if (typeof requestAnimationFrame !== 'function') { updateWindow(false); return; }
+      rafId = requestAnimationFrame(function () {
+        rafId = 0;
+        updateWindow(false);
       });
-      return span;
     }
 
     /**
-     * 压缩显示已改为纯 CSS 方案（body.jf-compact + .jf-compact 系列规则），
-     * 不再需要独立的渲染函数：树形 DOM 结构与美化模式完全一致，
-     * 只是用 CSS 把嵌套缩进/换行/折叠标记塌缩成单行。这样大 JSON 点「压缩」
-     * 只是切换一个 class，几十万节点零重建、零卡顿。
-     * （原 renderCompactNode / renderCompactChild 已删除）
+     * 把行表第 index 行滚进视口，返回落定后的首行下标（无效返回 -1）。
+     *
+     * 虚拟化之后，「让某一行出现在屏幕上」这件事只有本模块做得到 —— DOM 里
+     * 压根没有那一行，外部再怎么 querySelector 都找不到。所以路径跳转、
+     * 搜索结果定位、编辑器侧的「跳到某个节点」都得走这个入口。
+     *
+     * 目标行放在视口上方约 1/3 处，上下留出上下文；两端做钳制，免得露出留白。
+     * 同步重画一次（不等 rAF），这样调用方紧接着就能量到正确结果。
      */
-    /** 取消尚未执行的续建定时器 */
-    function cancelFill() {
-      if (session.timer) { clearTimeout(session.timer); session.timer = null; }
-    }
-
-    /** 给一行赋行号（按文档序递增）。numbering=false 或未开行号时跳过 */
-    function numberRow(row) {
-      if (!session.numbering || !opts.lineNumbers) return;
-      row.firstChild.textContent = String(++session.lines);
+    function revealRow(index) {
+      if (!model || !winEl) return -1;
+      var n = model.length;
+      if (n <= 0) return -1;
+      var i = index < 0 ? 0 : (index > n - 1 ? n - 1 : index);
+      var h = body.clientHeight || 0;
+      var want = i * ROW_H - Math.round(h / 3);
+      if (want < 0) want = 0;
+      var max = body.scrollHeight - h;
+      if (max > 0 && want > max) want = max;
+      body.scrollTop = want;
+      updateWindow(true);
+      // 行表可能因为目标行落在窗口之外而重新对齐，返回实际首行下标
+      return view.first;
     }
 
     /**
-     * 建一个节点：容器 = 开行 + 子容器 + 闭行；叶子/空容器 = 单行。
-     * 容器展开时把「待填充帧」压栈而不是递归填满，这是能分帧的关键。
+     * 事件委托：整棵树只挂一个 click。
+     *
+     * 虚拟化下窗口里的行元素每滚一帧就整批换掉，逐行挂监听意味着每帧都要建
+     * 一批闭包、再回收一批 —— 那是列表滚动卡顿的常见来源。这里改成从行号的
+     * data-i 反查节点，监听只在创建时挂一次。
      */
-    function pushNode(parentEl, node, keyNode, isLast, path, depth) {
-      depth = depth || 0;
-      var isContainer = node.type === 'object' || node.type === 'array';
-      var childCount = isContainer
-        ? (node.type === 'object' ? node.entries.length : node.items.length)
-        : 0;
+    function onBodyClick(e) {
+      var t = e.target;
+      if (!t || !t.closest || !winEl || !model) return;
+      var rowEl = t.closest('.jf-row');
+      if (!rowEl || !winEl.contains(rowEl)) return;
+      var i = parseInt(rowEl.getAttribute('data-i'), 10);
+      if (isNaN(i)) return;
+      var node = model.nodeAt(i);
+      if (!node) return;
 
-      if (isContainer && childCount > 0) {
-        var open = makeRow(node, depth);
-        numberRow(open);
-        var content = el('span', 'jf-content');
-        var toggle = makeToggle(node.expanded);
-
-        if (keyNode) {
-          content.appendChild(makeKeySpan(keyNode, path));
-          content.appendChild(el('span', 'jf-punct', ': '));
-        }
-        // 折叠标记位于键与括号之间，与参考设计一致
-        content.appendChild(toggle);
-        content.appendChild(el('span', 'jf-punct', node.type === 'object' ? '{' : '['));
-        var sum = el('span', 'jf-summary', summaryText(node));
-        sum.title = '点击展开';
-        if (node.expanded) sum.style.display = 'none';
-        content.appendChild(sum);
-        open.appendChild(content);
-        parentEl.appendChild(open);
-
-        var kids = el('div', 'jf-children');
-        parentEl.appendChild(kids);
-
-        var frame = null;
-        if (node.expanded) {
-          // entries 排序结果缓存在帧上，避免逐子节点重复 sort
-          frame = { kidsEl: kids, node: node, path: path, depth: depth + 1,
-                    i: 0, total: childCount,
-                    entries: node.type === 'object' ? orderedEntries(node) : null,
-                    closeGut: null, moreRow: null };
-          session.stack.push(frame);
-        } else {
-          kids.classList.add('jf-children-collapsed');
-        }
-
-        var closeRow = makeRow(node, depth);
-        var closeContent = el('span', 'jf-content');
-        closeContent.appendChild(el('span', 'jf-punct', node.type === 'object' ? '}' : ']'));
-        if (!isLast) closeContent.appendChild(el('span', 'jf-punct', ','));
-        closeRow.appendChild(closeContent);
-        parentEl.appendChild(closeRow);
-        // 闭行的行号要等整个子树建完才连续：挂到帧上、出栈时赋号；
-        // 折叠容器没有子树，当场赋号
-        if (frame) frame.closeGut = closeRow.firstChild;
-        else numberRow(closeRow);
-
-        function toggleNode() {
-          /* 不再「先 flushFill 收尾再动 DOM」：那会把剩余文档同步建完
-             （total=Infinity 绕过了总量闸门，20MB 下就是几十秒假死）。
-             现在直接在队列里摘掉与本层相关的帧，后台续建照常分帧进行。 */
-          node.expanded = !node.expanded;
-          setToggleIcon(toggle, node.expanded);
-          sum.style.display = node.expanded ? 'none' : '';
-          kids.classList.toggle('jf-children-collapsed', !node.expanded);
-          if (node.expanded) {
-            /* 折叠只是把子层 display:none，子行仍留在 DOM 里。
-               再展开前必须清掉重建，否则同一批子节点会被原样追加一遍——
-               折叠/展开几次就翻几倍（渐进渲染改造引入的回归）。
-               同时把队列里仍指向这层的帧摘掉：它们拿着旧的 i/total/moreRow，
-               留着会在续建时把剩余子节点再灌一遍。 */
-            kids.textContent = '';
-            for (var si = session.stack.length - 1; si >= 0; si--) {
-              var fk = session.stack[si].kidsEl;
-              if (fk === kids || kids.contains(fk)) session.stack.splice(si, 1);
-            }
-            /* 行号由 renumber() 统一算（插入点在文档中部，不能用会话计数器）；
-               被摘掉的帧欠着闭行行号，也要靠这趟全树重编号补回来。 */
-            session.numbering = false;
-            session.total = TOTAL_ROWS;
-            session.budget = MAX_CHUNK;
-            session.stack.push({
-              kidsEl: kids, node: node, path: path, depth: depth + 1,
-              i: 0, total: childCount,
-              entries: node.type === 'object' ? orderedEntries(node) : null,
-              closeGut: null, moreRow: null
-            });
-            step();
-            if (session.stack.length) scheduleFill();   // 文档其余部分继续分帧补
-          } else {
-            if (session.stack.length) session.numbering = false;
-            renumber();
-          }
-          updateStats();
-        }
-        toggle.addEventListener('click', toggleNode);
-        sum.addEventListener('click', toggleNode);
+      if (t.closest('.jf-toggle') || t.closest('.jf-summary')) {
+        /* 折叠 / 展开：只动行表的一段（O(插入行数)），然后把窗口重画一遍。
+           spacer 高度跟着 model.length 变，滚动位置保持不变 —— 被点的这一行
+           在它之前的位置没有变，所以视觉上它「钉在原地」收放。 */
+        if (model.isClose(i) || !isContainerNode(node)) return;
+        model.setExpanded(node, !node.expanded, i);
+        layout();
+        updateWindow(true);
+        updateStats();
         return;
       }
-
-      // 基本类型，或空对象 / 空数组
-      var row = makeRow(node, depth);
-      numberRow(row);
-      var rowContent = el('span', 'jf-content');
-      if (keyNode) {
-        rowContent.appendChild(makeKeySpan(keyNode, path));
-        rowContent.appendChild(el('span', 'jf-punct', ': '));
+      if (t.closest('.jf-key')) {
+        var p = model.pathOf(node);
+        doCopy(p, '已复制路径：' + p);
+        return;
       }
-      if (isContainer) {
-        rowContent.appendChild(el('span', 'jf-punct', node.type === 'object' ? '{}' : '[]'));
-      } else {
-        var v = el('span', nodeValueClass(node));
-        appendValueText(v, node);
-        v.title = '点击复制值';
-        v.style.cursor = 'pointer';
-        v.addEventListener('click', function () { doCopy(valueText(node), '已复制值'); });
-        rowContent.appendChild(v);
-      }
-      if (!isLast) rowContent.appendChild(el('span', 'jf-punct', ','));
-      row.appendChild(rowContent);
-      parentEl.appendChild(row);
+      if (t.closest('.jf-val')) doCopy(valueText(node), '已复制值');
     }
 
     /**
-     * 消费任务栈，直到栈空或本帧预算用完。
-     * 深度优先的建行顺序 === 文档顺序，所以行号可以在建行时直接递增赋值；
-     * 唯一的例外是容器闭行——它的行号要等子树建完才连续，因此挂到帧上、
-     * 出栈时再赋。这使得「分帧补齐」过程中行号始终是正确的。
+     * 「压缩」视图：直接给紧凑序列化文本。
+     *
+     * 旧版是纯 CSS 把嵌套结构塌缩成一行（DOM 不动），但扁平行表里只挂着视口
+     * 那几十行，塌缩出来的也只是文档的一小段，语义上已经不成立了。序列化走
+     * nativeText 快路径（原生 JSON.stringify），20MB 也就百来毫秒。
+     *
+     * 超过 COMPACT_MAX 只渲染前面一段：一整行几 MB 的文本连 shaping 都会假死，
+     * 而完整内容本来就能用「复制 / 下载」拿到，没必要在屏幕上赌一把。
      */
-    function step() {
-      while (session.stack.length) {
-        var f = session.stack[session.stack.length - 1];
-        // 先收尾已建完的容器：这样走到下面两个预算分支时，栈顶一定是
-        // 还有子节点没建的容器，「挂哨兵」才有意义。
-        // （否则会出现：总量刚好用完时栈顶已建完 → attachMore 无事可做 →
-        //   这帧直接 return，帧既不出栈、闭行行号也永远欠着，渲染卡在半途。）
-        if (f.i >= f.total) {
-          session.stack.pop();
-          if (f.moreRow && f.moreRow.parentNode) f.kidsEl.removeChild(f.moreRow);
-          if (f.closeGut) {
-            if (session.numbering && opts.lineNumbers) {
-              f.closeGut.textContent = String(++session.lines);
-            }
-            f.closeGut = null;
-          }
-          continue;
-        }
-        if (session.total <= 0) {            // 总行数到顶：挂哨兵，等用户点「加载更多」
-          attachMore();
-          // 前沿的一串闭括号行一直没等到行号（它们的行号取决于未加载的子树），
-          // 这是个用户会盯着看的稳定状态，做一次全树重编号让行号连续
-          if (opts.lineNumbers) renumber();
-          return;
-        }
-        if (session.budget <= 0) {           // 本帧建满了：挂哨兵，约下帧继续
-          attachMore();
-          scheduleFill();
-          return;
-        }
-        if (f.moreRow) {                     // 续建前先摘掉哨兵，保证新行插在它前面
-          if (f.moreRow.parentNode) f.kidsEl.removeChild(f.moreRow);
-          f.moreRow = null;
-        }
-        session.budget--;
-        session.total--;
-        var isLast = f.i === f.total - 1;
-        if (f.entries) {
-          var en = f.entries[f.i];
-          pushNode(f.kidsEl, en.value, en.keyNode, isLast,
-                   parser.joinKey(f.path, en.keyNode.value), f.depth);
-        } else {
-          pushNode(f.kidsEl, f.node.items[f.i], null, isLast,
-                   f.path + '[' + f.i + ']', f.depth);
-        }
-        f.i++;
+    function renderCompactText() {
+      var text = outputText();
+      var shown = text.length > COMPACT_MAX ? text.slice(0, COMPACT_MAX) : text;
+      var box = el('pre', 'jf-ctext');
+      // 分块塞文本节点：单个几 MB 的 text node 会拖慢选区与后续操作
+      for (var i = 0; i < shown.length; i += 65536) {
+        box.appendChild(body.ownerDocument.createTextNode(shown.slice(i, i + 65536)));
       }
-      // 栈空 = 本轮渲染全部建完
-      if (!session.numbering && opts.lineNumbers) renumber();
-    }
-
-    /** 在当前栈顶容器的末尾挂「还有 N 项」哨兵（不占行号） */
-    function attachMore() {
-      var f = session.stack[session.stack.length - 1];
-      if (!f || f.moreRow || f.i >= f.total) return;
-      var remain = f.total - f.i;
-      var row = el('div', 'jf-row');
-      row.style.setProperty('--jf-depth', String(f.depth));
-      if (session.late) row.classList.add('jf-late');
-      var gut = el('span', 'jf-no jf-no-more');
-      if (!opts.lineNumbers) gut.style.display = 'none';
-      row.appendChild(gut);
-      // 哨兵不占行号：它会在续建时被移除，占了号就会留下一个永久的号洞
-      var ct = el('span', 'jf-content');
-      var s = el('span', 'jf-summary',
-        '… 还有 ' + remain.toLocaleString() + ' 项，点击加载更多');
-      s.title = '点击继续加载';
-      s.addEventListener('click', function () {
-        cancelFill();
-        session.numbering = false;           // 插入点在文档中部，交给 renumber()
-        session.total = TOTAL_ROWS;          // 用户主动要更多，重新给足总量
-        session.budget = MAX_CHUNK * 2;
-        step();
-      });
-      ct.appendChild(s);
-      row.appendChild(ct);
-      f.kidsEl.appendChild(row);
-      f.moreRow = row;
-    }
-
-    /* （flushFill 已删除：它把 session.total 设成 Infinity 绕过总量闸门，
-        在后台续建未完成时点击折叠/展开会同步建完整棵树，20MB 直接假死。
-        现在展开改为「摘帧 + 重建 + scheduleFill 续跑」，见 toggleNode。） */
-
-    /** 约下一帧继续建（setTimeout(0) 让浏览器先上屏、响应输入） */
-    function scheduleFill() {
-      if (session.timer) return;
-      var token = renderToken;
-      session.timer = setTimeout(function () {
-        session.timer = null;
-        if (token !== renderToken) return;   // 期间发起了新的格式化，这轮作废
-        session.budget = FILL_ROWS;
-        session.late = true;
-        step();
-      }, 0);
-    }
-
-    function renumber() {
-      var gutt = body.querySelectorAll('.jf-no');
-      var k = 0;
-      for (var i = 0; i < gutt.length; i++) {
-        if (gutt[i].classList.contains('jf-no-more')) continue;  // 哨兵是占位符，不编号
-        if (!isVisible(gutt[i])) continue;
-        k++;
-        gutt[i].textContent = opts.lineNumbers ? String(k) : '';
+      if (shown.length < text.length) {
+        box.appendChild(el('div', 'jf-ctext-note',
+          '… 仅显示前 ' + formatBytes(COMPACT_MAX) + '（共 ' + formatBytes(text.length) +
+          '），完整内容请用「复制」或「下载」'));
+        /* 上面那份完整文本可能是几十 MB 的字符串（JS 字符串 2 字节/字符，
+           20MB 文本就是 40MB 内存）。既然屏幕上只显示前一段，就别让缓存一直
+           占着它 —— 真要复制/下载时再序列化一次就是了。 */
+        outCache.key = null;
+        outCache.text = '';
       }
-    }
-
-    function isVisible(node) {
-      var cur = node;
-      while (cur && cur !== body) {
-        if (cur.hidden || (cur.classList && cur.classList.contains('jf-children-collapsed')) ||
-            (cur.style && cur.style.display === 'none')) {
-          return false;
-        }
-        cur = cur.parentElement;
-      }
-      return true;
+      body.appendChild(box);
     }
 
     function renderError() {
@@ -977,12 +955,14 @@
     }
 
     function render() {
-      cancelFill();
-      renderToken++;
+      cancelWindow();
       body.textContent = '';
-      body.scrollTop = 0;
-      // 压缩模式只靠 CSS class 切换排版（.jf-compact），不改变树形 DOM 结构
+      // body 上的 jf-compact 只是「当前是压缩视图」的状态标记（CSS 不再依赖它）
       body.classList.toggle('jf-compact', state.outMode === 'compact');
+      model = null;
+      sizerEl = null;
+      winEl = null;
+      view.first = view.last = -1;
       if (state.error) {
         renderError();
         updateStats();
@@ -993,20 +973,25 @@
         updateStats();
         return;
       }
-      /* 首帧只建 PAINT_ROWS 行就交给浏览器上屏（肉眼看是即时的），
-         剩下的行由 scheduleFill 分帧补齐。过去是一次建完 5700 行再布局，
-         样式重算 + 布局近 500ms 全部堵在主线程上。 */
-      session.stack.length = 0;
-      session.lines = 0;
-      session.numbering = true;
-      session.late = false;
-      session.budget = PAINT_ROWS;
-      session.total = TOTAL_ROWS;
-      var frag = body.ownerDocument.createDocumentFragment();
-      pushNode(frag, state.root, null, true, '$', 0);
-      body.appendChild(frag);
-      session.late = true;
-      step();                                // 用掉剩余的首帧预算，不够则自动约下帧
+      if (state.outMode === 'compact') {
+        renderCompactText();
+        updateStats();
+        return;
+      }
+      /* 建行表 → 铺 spacer 高度 → 画视口那几十行。
+         行表只摊平「当前可见」的行：折叠的分支不进表、也不物化它的后代。
+         整棵树全展开时行表是 O(节点数)（22MB 约 36 万行、实测 ~280ms），
+         那是文档规模决定的下限成本，与「渲染」无关 —— 渲染始终只有几十行。 */
+      model = NS.rowModel.create(state.root, rowAccess());
+      sizerEl = el('div', 'jf-sizer');
+      winEl = el('div', 'jf-window');
+      sizerEl.appendChild(winEl);
+      body.appendChild(sizerEl);
+      body.scrollTop = 0;
+      layout();
+      lateRows = false;                      // 首屏这一批行要播入场动效
+      updateWindow(true);
+      lateRows = true;                       // 之后的滚动补画都不再播
       updateStats();
     }
 
@@ -1188,8 +1173,11 @@
       var outPart = (outCache.key === key && outCache.text)
         ? ' · 输出 ' + formatBytes(outCache.text.length)
         : '';
+      /* 行数（行表长度）是虚拟化后最该让用户知道的数字：文档多大都只有几十行
+         挂在 DOM 上，真正决定滚动条长度的是行表长度。压缩视图没有行表，不显示。 */
+      var rowsPart = model ? model.length.toLocaleString('zh-CN') + ' 行 · ' : '';
       statsLabel.textContent =
-        state.stats.count + ' 个节点 · 深度 ' + state.stats.depth +
+        rowsPart + state.stats.count + ' 个节点 · 深度 ' + state.stats.depth +
         ' · 源码 ' + formatBytes(state.text.length) + outPart;
     }
 
@@ -1246,7 +1234,9 @@
     }
 
     function destroy() {
+      cancelWindow();
       if (toastTimer) clearTimeout(toastTimer);
+      if (resObs) { try { resObs.disconnect(); } catch (e) { /* ignore */ } resObs = null; }
       if (rootEl && rootEl.parentNode) rootEl.parentNode.removeChild(rootEl);
     }
 
@@ -1255,8 +1245,20 @@
       updateOptions: updateOptions,
       destroy: destroy,
       outputText: outputText,
+      /** 把行表第 index 行滚进视口（虚拟化后唯一的「显示某一行」入口） */
+      revealRow: revealRow,
       toast: toast,
       getState: function () { return state; },
+      /** 调试/验收用：虚拟化窗口的当前状态（不参与渲染逻辑） */
+      getView: function () {
+        return {
+          rows: model ? model.length : 0,
+          first: view.first,
+          last: view.last,
+          dom: winEl ? winEl.children.length : 0,
+          rowHeight: ROW_H
+        };
+      },
       rootEl: rootEl
     };
   }

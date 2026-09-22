@@ -178,6 +178,14 @@
         i++;
         ws();
         var valueNode = readValue(depth + 1);
+        /* 回填「父节点 / 在父节点里的下标 / 自己的键节点」。
+           这三样在快路径（native + 惰性树）里是建节点时就有，手写解析器以前不回填，
+           于是「按 parent 链拼路径」「按键名取显示文本」这类能力只在快路径可用。
+           行模型（rowmodel.js）两个都用：pathOf 走 parent 链，行渲染读 keyNode。
+           这里补上，两条解析路径的节点形状才真正一致。 */
+        valueNode.parent = node;
+        valueNode.indexInParent = node.entries.length;
+        valueNode.keyNode = keyNode;
         node.entries.push({ keyNode: keyNode, value: valueNode });
         ws();
         if (text[i] === ',') {
@@ -209,7 +217,10 @@
       }
       while (true) {
         ws();
-        node.items.push(readValue(depth + 1));
+        var item = readValue(depth + 1);
+        item.parent = node;                      // 见 readObject 里的说明
+        item.indexInParent = node.items.length;
+        node.items.push(item);
         ws();
         if (text[i] === ',') {
           i++;
