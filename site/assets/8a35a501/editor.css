@@ -712,6 +712,21 @@ kbd {
 
 .big-view[hidden] { display: none; }
 
+/* 大文档工具条：度量与 viewer.js 的 .jf-toolbar 对齐（30px 按钮 + 8px/12px 内边距），
+   配色 token 由 viewer.js 注入的 .jf-bigtoolbar 规则提供（与 .jf-big 同一份），
+   这里只管布局 —— 它是 #bigView 的兄弟节点，取不到 .jf-big 上的变量。 */
+.jf-bigtoolbar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-soft, rgba(127, 127, 127, .22));
+}
+
+.jf-bigtoolbar[hidden] { display: none; }
+
 .big-view .cm-editor {
   height: 100%;
   width: 100%;

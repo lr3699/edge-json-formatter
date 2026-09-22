@@ -12,9 +12,9 @@
   <meta property="og:description" content="双栏 JSON 工作台：左栏粘贴原文、右栏实时预览，可折叠树、搜索、JSONPath 复制，纯本地运行。">
   <meta property="og:image" content="https://lr3699.github.io/json-formatter-pro/og-image.png">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="icon" href="favicon.png?v=5cc1480f" type="image/png">
-  <link rel="stylesheet" href="assets/5cc1480f/editor.css">
-  <link rel="stylesheet" href="app.css?v=5cc1480f">
+  <link rel="icon" href="favicon.png?v=8a35a501" type="image/png">
+  <link rel="stylesheet" href="assets/8a35a501/editor.css">
+  <link rel="stylesheet" href="app.css?v=8a35a501">
 </head>
 <body>
   <div class="aurora" aria-hidden="true">
@@ -150,6 +150,9 @@
 
     <section class="panel panel-output" id="panelOutput">
       <div id="viewer" class="viewer-host" hidden></div>
+      <!-- 大文档视图的工具条：刻意放在 #bigView 外面（CM 要自己量可视区尺寸，
+           不能往它内部塞节点），因此配色 token 在 viewer.js 的 .jf-bigtoolbar 上单独定义 -->
+      <div id="bigToolbar" class="jf-bigtoolbar" hidden></div>
       <!-- 大文档视图（CodeMirror 6 虚拟化）：文本超阈值时用它替代树视图 -->
       <div id="bigView" class="viewer-host big-view" hidden></div>
       <div id="welcome" class="welcome">
@@ -210,14 +213,14 @@
     </section>
   </aside>
 
-  <script src="assets/5cc1480f/codemirror.bundle.js"></script>
-  <script src="assets/5cc1480f/defaults.js"></script>
-  <script src="assets/web-storage.js?v=5cc1480f"></script>
-  <script src="assets/5cc1480f/json-parser.js"></script>
-  <script src="assets/5cc1480f/rowmodel.js"></script>
-  <script src="assets/5cc1480f/viewer.js"></script>
-  <script src="assets/5cc1480f/bigview.js"></script>
-  <script src="assets/5cc1480f/editor.js"></script>
-  <script src="assets/web-settings.js?v=5cc1480f"></script>
+  <script src="assets/8a35a501/codemirror.bundle.js"></script>
+  <script src="assets/8a35a501/defaults.js"></script>
+  <script src="assets/web-storage.js?v=8a35a501"></script>
+  <script src="assets/8a35a501/json-parser.js"></script>
+  <script src="assets/8a35a501/rowmodel.js"></script>
+  <script src="assets/8a35a501/viewer.js"></script>
+  <script src="assets/8a35a501/bigview.js"></script>
+  <script src="assets/8a35a501/editor.js"></script>
+  <script src="assets/web-settings.js?v=8a35a501"></script>
 </body>
 </html>

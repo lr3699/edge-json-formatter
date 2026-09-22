@@ -412,7 +412,9 @@
 
   function hideBigView() {
     bigHost.hidden = true;
-    bigToolbarEl.hidden = true;
+    // 工具条是可选装饰：宿主里没这个节点也不能连累正文渲染
+    // （曾经就因为它是 null，这里一抛异常，整段格式化结果都不显示）
+    if (bigToolbarEl) bigToolbarEl.hidden = true;
     // 离开大文档视图：顶栏与底部状态带恢复正常，输入栏也交回给用户
     setBigDocMode(false);
   }
@@ -617,7 +619,7 @@
     welcomeEl.hidden = true;
     bigHost.hidden = false;
     buildBigToolbar();
-    bigToolbarEl.hidden = false;
+    if (bigToolbarEl) bigToolbarEl.hidden = false;
     bt.folded = false;
     syncBigToolbar();
     setBigDocMode(true);

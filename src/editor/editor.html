@@ -149,6 +149,9 @@
 
     <section class="panel panel-output" id="panelOutput">
       <div id="viewer" class="viewer-host" hidden></div>
+      <!-- 大文档视图的工具条：刻意放在 #bigView 外面（CM 要自己量可视区尺寸，
+           不能往它内部塞节点），因此配色 token 在 viewer.js 的 .jf-bigtoolbar 上单独定义 -->
+      <div id="bigToolbar" class="jf-bigtoolbar" hidden></div>
       <!-- 大文档视图（CodeMirror 6 虚拟化）：文本超阈值时用它替代树视图 -->
       <div id="bigView" class="viewer-host big-view" hidden></div>
       <div id="welcome" class="welcome">
