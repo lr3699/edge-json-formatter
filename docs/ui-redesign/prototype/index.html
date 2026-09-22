@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light" data-density="comfortable">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JSON Duo · 界面重设计原型</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+/* ==========================================================================
+   原型外壳（不属于产品，仅用于切换视图）
+   ========================================================================== */
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg-canvas);color:var(--text-1);
+  font-family:var(--font-ui);font-size:var(--fs-sm);line-height:var(--lh-sm);
+  -webkit-font-smoothing:antialiased;
+}
+.shell{display:flex;flex-direction:column;height:100%;min-height:0}
+.specbar{
+  display:flex;align-items:center;gap:var(--sp-5);padding:0 var(--sp-8);
+  height:52px;background:var(--bg-surface);border-bottom:1px solid var(--border-subtle);
+  flex:0 0 auto;
+}
+.specbar h1{font-size:var(--fs-md);font-weight:var(--fw-semi);margin:0;letter-spacing:-.01em}
+.specbar .tag{
+  font-size:var(--fs-micro);padding:2px 8px;border-radius:var(--r-full);
+  background:var(--brand-100);color:var(--brand-700);font-weight:var(--fw-medium);
+}
+.seg{
+  display:inline-flex;padding:2px;gap:2px;background:var(--bg-surface-3);
+  border-radius:var(--r-md);height:28px;
+}
+.seg button{
+  border:0;background:transparent;color:var(--text-2);font:inherit;font-size:var(--fs-xs);
+  padding:0 12px;border-radius:var(--r-sm);cursor:pointer;transition:all var(--d-fast) var(--e-std);
+}
+.seg button[aria-selected="true"]{background:var(--bg-surface);color:var(--text-1);
+  font-weight:var(--fw-medium);box-shadow:var(--e1)}
+.spacer{flex:1}
+.view{flex:1;min-height:0;overflow:auto}
+.view[hidden]{display:none}
+
+/* ==========================================================================
+   产品界面
+   ========================================================================== */
+.app{display:flex;flex-direction:column;height:100%;min-height:0;background:var(--bg-canvas)}
+.app.is-fullscreen{position:fixed;inset:0;z-index:60}
+
+/* 顶栏 ------------------------------------------------------------------ */
+.topbar{
+  flex:0 0 auto;height:var(--topbar-h);display:flex;align-items:center;gap:var(--sp-7);
+  padding:0 var(--sp-8);background:var(--bg-surface);
+  border-bottom:1px solid var(--border-subtle);
+}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand-mark{
+  width:30px;height:30px;border-radius:var(--r-md);display:grid;place-items:center;
+  color:#fff;background:linear-gradient(140deg,var(--brand-500),var(--brand-600));
+  box-shadow:0 2px 6px -2px rgba(31,169,127,.55);
+}
+.brand-mark svg{width:18px;height:18px}
+.brand-text{display:flex;flex-direction:column;line-height:1.25;min-width:0}
+.brand-text b{font-size:var(--fs-md);font-weight:var(--fw-semi);letter-spacing:-.01em}
+.brand-text em{font-style:normal;font-size:var(--fs-micro);color:var(--text-3)}
+.keys{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-micro);color:var(--text-3)}
+kbd{
+  font-family:var(--font-mono);font-size:var(--fs-micro);line-height:18px;height:18px;
+  padding:0 6px;display:inline-block;border-radius:var(--r-xs);
+  background:var(--bg-surface-3);border:1px solid var(--border-subtle);
+  box-shadow:0 1px 0 var(--border-subtle);color:var(--text-2);
+}
+.keys .sep{color:var(--border-strong)}
+.keys span.t{color:var(--text-3)}
+.topbar-tools{display:flex;align-items:center;gap:var(--sp-2);margin-left:auto}
+
+/* 按钮 ------------------------------------------------------------------ */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  height:32px;padding:0 12px;border:1px solid transparent;border-radius:var(--r-sm);
+  background:transparent;color:var(--text-2);font:inherit;font-size:var(--fs-sm);
+  font-weight:var(--fw-medium);cursor:pointer;white-space:nowrap;
+  transition:background var(--d-instant) var(--e-std),color var(--d-instant) var(--e-std),
+             border-color var(--d-instant) var(--e-std),transform var(--d-fast) var(--e-std),
+             box-shadow var(--d-fast) var(--e-std);
+}
+.btn svg{width:16px;height:16px;flex:0 0 auto}
+.btn:hover{background:var(--bg-surface-3);color:var(--text-1)}
+.btn:active{transform:scale(.97)}
+.btn[aria-pressed="true"]{background:var(--brand-100);color:var(--brand-700)}
+.btn-primary{background:var(--brand-500);color:#fff;box-shadow:0 1px 2px rgba(31,169,127,.35)}
+.btn-primary:hover{background:var(--brand-600);color:#fff}
+.btn-secondary{background:var(--bg-surface);border-color:var(--border);color:var(--text-1);box-shadow:var(--e1)}
+.btn-secondary:hover{background:var(--bg-surface-2)}
+.btn-subtle{background:var(--bg-surface-3);color:var(--text-1)}
+.btn-danger{color:var(--danger-500)}
+.btn-danger:hover{background:var(--danger-100)}
+.btn-sm{height:28px;padding:0 10px;font-size:var(--fs-xs)}
+.btn-icon{width:32px;height:32px;padding:0}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.is-done{background:var(--success-100);color:var(--success-500)}
+
+/* 工作区 ---------------------------------------------------------------- */
+.workspace{
+  flex:1;min-height:0;display:grid;grid-template-columns:var(--split) 8px 1fr;
+  gap:0;padding:var(--sp-7);padding-right:var(--sp-7);
+}
+.app.is-solo .workspace{grid-template-columns:8px 1fr}
+.app.is-solo .panel-input{display:none}
+.app.is-fullscreen .workspace{padding:8px}
+
+.panel{
+  background:var(--bg-surface);border-radius:var(--r-xl);box-shadow:var(--e2);
+  display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;
+  transition:box-shadow var(--d-base) var(--e-std);
+}
+.panel-head{
+  flex:0 0 auto;height:var(--panel-head);display:flex;align-items:center;gap:var(--sp-4);
+  padding:0 var(--sp-6);border-bottom:1px solid var(--border-subtle);background:var(--bg-surface-2);
+}
+.panel-title{display:flex;align-items:center;gap:7px;font-size:var(--fs-sm);font-weight:var(--fw-semi);color:var(--text-1)}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--border-strong);flex:0 0 auto}
+.dot-in{background:var(--accent-500)}
+.dot-out{background:var(--brand-500)}
+.panel-tools{display:flex;align-items:center;gap:var(--sp-2);margin-left:auto}
+.vsep{width:1px;height:16px;background:var(--border);margin:0 2px}
+.panel-body{flex:1;min-height:0;position:relative;overflow:hidden;background:var(--bg-inset)}
+.panel-foot{
+  flex:0 0 auto;height:var(--panel-foot);display:flex;align-items:center;gap:var(--sp-5);
+  padding:0 var(--sp-6);border-top:1px solid var(--border-subtle);background:var(--bg-surface-2);
+  font-size:var(--fs-xs);color:var(--text-3);
+}
+.panel-foot .muted{color:var(--text-3)}
+.panel-foot .foot-info{
+  font-family:var(--font-mono);font-size:var(--fs-micro);color:var(--text-3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.pill{
+  display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 9px;
+  border-radius:var(--r-full);background:var(--bg-surface-3);color:var(--text-2);
+  font-size:var(--fs-micro);font-weight:var(--fw-medium);
+}
+.pill .pdot{width:6px;height:6px;border-radius:50%;background:var(--text-4)}
+.pill.is-ok{background:var(--success-100);color:var(--success-500)}
+.pill.is-ok .pdot{background:var(--success-500)}
+.pill.is-warn{background:var(--warning-100);color:var(--warning-500)}
+.pill.is-warn .pdot{background:var(--warning-500)}
+.pill.is-err{background:var(--danger-100);color:var(--danger-500)}
+.pill.is-err .pdot{background:var(--danger-500)}
+.pill.is-info{background:var(--info-100);color:var(--info-500)}
+.pill.is-info .pdot{background:var(--info-500)}
+.spacer-f{flex:1}
+
+/* 分隔条 ---------------------------------------------------------------- */
+.splitter{
+  position:relative;cursor:col-resize;display:grid;place-items:center;
+}
+.splitter::before{
+  content:"";position:absolute;top:12px;bottom:12px;width:2px;border-radius:2px;
+  background:var(--border-subtle);transition:background var(--d-fast) var(--e-std);
+}
+.splitter .grip{
+  width:24px;height:4px;border-radius:var(--r-full);background:var(--border-strong);
+  opacity:0;transition:opacity var(--d-fast) var(--e-std);
+}
+.splitter:hover::before,.splitter.is-drag::before{background:var(--brand-500)}
+.splitter:hover .grip,.splitter.is-drag .grip{opacity:1;background:var(--brand-500)}
+
+/* 输入区 ---------------------------------------------------------------- */
+.editor-wrap{flex:1;min-height:0;display:flex;position:absolute;inset:0}
+#input{
+  flex:1;border:0;outline:0;resize:none;padding:var(--sp-5) var(--sp-6);
+  font-family:var(--font-mono);font-size:var(--fs-md);line-height:1.7;
+  color:var(--text-1);background:var(--bg-inset);tab-size:2;
+}
+#input::placeholder{color:var(--text-4)}
+.drop-hint{
+  position:absolute;inset:10px;border:1.5px dashed var(--border-strong);border-radius:var(--r-lg);
+  display:none;place-items:center;background:rgba(255,255,255,.86);color:var(--text-2);font-size:var(--fs-sm);
+}
+.drop-hint.on{display:grid}
+
+/* 结果区 ---------------------------------------------------------------- */
+.viewer{position:absolute;inset:0;overflow-y:auto;padding:var(--sp-3) 0}
+.view-pane{position:absolute;inset:0;display:none}
+.view-pane.on{display:block}
+.raw-text{
+  margin:0;padding:var(--sp-5) var(--sp-6);font-family:var(--font-mono);
+  font-size:var(--fs-md);line-height:1.7;color:var(--text-2);white-space:pre-wrap;word-break:break-all;
+  height:100%;overflow:auto;
+}
+
+/* 树行 */
+.row{
+  display:flex;align-items:center;height:var(--row-h);padding-right:var(--sp-5);
+  font-family:var(--font-mono);font-size:var(--fs-md);line-height:var(--row-h);
+  color:var(--text-1);cursor:default;position:relative;white-space:nowrap;
+  transition:background var(--d-instant) var(--e-std);
+}
+.row:hover{background:var(--bg-surface-3)}
+.row:hover::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--brand-500)}
+.row.is-sel{background:var(--accent-100)}
+.row-indent{flex:0 0 auto;width:calc(12px + var(--d) * var(--indent));height:100%;
+  background-image:repeating-linear-gradient(to right,var(--border-subtle) 0 1px,transparent 1px var(--indent));
+  background-size:calc(var(--d) * var(--indent)) 100%;background-repeat:no-repeat;
+  background-position:12px 0;}
+.caret{
+  flex:0 0 auto;width:16px;height:16px;display:grid;place-items:center;border:0;background:transparent;
+  color:var(--text-3);cursor:pointer;padding:0;margin-right:2px;border-radius:4px;
+  transition:transform var(--d-base) var(--e-std),color var(--d-instant) var(--e-std);
+}
+.caret svg{width:12px;height:12px;transition:transform var(--d-base) var(--e-std)}
+.caret:hover{color:var(--text-1);background:var(--border-subtle)}
+.row.open > .caret svg{transform:rotate(90deg)}
+.caret-space{flex:0 0 auto;width:16px;margin-right:2px}
+.tico{flex:0 0 auto;width:14px;text-align:center;color:var(--text-4);font-size:10px;margin-right:5px}
+.k{color:var(--syn-key);font-weight:var(--fw-medium)}
+.p{color:var(--syn-punct);margin:0 2px 0 1px}
+.v.str{color:var(--syn-string)}
+.v.num{color:var(--syn-number)}
+.v.bool{color:var(--syn-boolean)}
+.v.nul{color:var(--syn-null);font-style:italic}
+.v.trunc{max-width:44ch;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:bottom}
+.ct{color:var(--text-3);font-size:var(--fs-micro);margin-left:6px}
+.ln{
+  margin-left:auto;color:var(--text-4);font-size:var(--fs-micro);
+  font-variant-numeric:tabular-nums;padding-left:var(--sp-5);opacity:.55;
+}
+.row:hover .ln{opacity:1}
+.row.dim{opacity:.35}
+mark.hl{background:rgba(217,138,31,.22);color:inherit;border-radius:3px;padding:0 1px}
+mark.hl.cur{background:var(--warning-500);color:#fff}
+
+/* 空状态 */
+.welcome{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:var(--sp-4);padding:var(--sp-9);text-align:center;color:var(--text-3);
+}
+.welcome svg{width:120px;height:96px;color:var(--brand-500);opacity:.85}
+.welcome h2{margin:0;font-size:var(--fs-xl);line-height:var(--lh-xl);font-weight:var(--fw-semi);color:var(--text-1)}
+.welcome p{margin:0;font-size:var(--fs-sm);max-width:34ch}
+.welcome ul{list-style:none;margin:var(--sp-2) 0 0;padding:0;display:grid;gap:6px;font-size:var(--fs-xs)}
+.welcome li{display:flex;align-items:center;gap:7px;justify-content:center}
+.welcome li::before{content:"✓";color:var(--brand-500);font-weight:700}
+.welcome-actions{display:flex;gap:var(--sp-4);margin-top:var(--sp-3)}
+
+/* 搜索 */
+.search{position:relative;display:flex;align-items:center}
+.search svg{position:absolute;left:8px;width:14px;height:14px;color:var(--text-3);pointer-events:none}
+.search input{
+  width:180px;height:28px;padding:0 8px 0 28px;border:1px solid var(--border);
+  border-radius:var(--r-md);background:var(--bg-surface);color:var(--text-1);
+  font:inherit;font-size:var(--fs-xs);outline:0;
+  transition:width var(--d-base) var(--e-std),border-color var(--d-fast) var(--e-std),
+             box-shadow var(--d-fast) var(--e-std);
+}
+.search input:focus{width:280px;border-color:var(--accent-500);box-shadow:0 0 0 3px var(--ring)}
+.search .count{font-size:var(--fs-micro);color:var(--text-3);font-family:var(--font-mono);margin-left:6px}
+
+/* 抽屉 ------------------------------------------------------------------ */
+.scrim{
+  position:fixed;inset:0;background:rgba(16,24,40,.28);backdrop-filter:blur(2px);
+  opacity:0;pointer-events:none;transition:opacity var(--d-base) var(--e-std);z-index:80;
+}
+.scrim.on{opacity:1;pointer-events:auto}
+.drawer{
+  position:fixed;top:0;right:0;bottom:0;width:var(--drawer-w);z-index:90;
+  background:var(--bg-surface);box-shadow:var(--e4);border-radius:var(--r-xl) 0 0 var(--r-xl);
+  display:flex;flex-direction:column;transform:translateX(100%);
+  transition:transform var(--d-slow) var(--e-out);
+}
+.drawer.on{transform:translateX(0)}
+.drawer-head{
+  flex:0 0 auto;display:flex;align-items:center;gap:var(--sp-4);
+  padding:var(--sp-6) var(--sp-6);border-bottom:1px solid var(--border-subtle);
+}
+.drawer-head h3{margin:0;font-size:var(--fs-lg);line-height:var(--lh-lg);font-weight:var(--fw-semi)}
+.drawer-body{flex:1;overflow-y:auto;padding:var(--sp-5) var(--sp-6) var(--sp-8)}
+.group{margin-bottom:var(--sp-9)}
+.group > h4{
+  margin:0 0 var(--sp-4);font-size:var(--fs-micro);font-weight:var(--fw-semi);
+  letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);
+}
+.opt{
+  display:flex;align-items:center;gap:var(--sp-5);min-height:40px;
+  padding:var(--sp-2) 0;border-bottom:1px solid var(--border-subtle);
+}
+.opt:last-child{border-bottom:0}
+.opt .lbl{flex:1;min-width:0}
+.opt .lbl b{display:block;font-size:var(--fs-sm);font-weight:var(--fw-medium);color:var(--text-1)}
+.opt .lbl span{display:block;font-size:var(--fs-micro);color:var(--text-3);margin-top:1px}
+.opt .ctl{flex:0 0 auto;display:flex;align-items:center;gap:var(--sp-2)}
+select{
+  height:30px;padding:0 8px;border:1px solid var(--border);border-radius:var(--r-sm);
+  background:var(--bg-surface);color:var(--text-1);font:inherit;font-size:var(--fs-xs);outline:0;
+}
+.switch{
+  position:relative;width:40px;height:22px;border-radius:var(--r-full);border:0;cursor:pointer;
+  background:var(--border-strong);transition:background var(--d-base) var(--e-std);flex:0 0 auto;
+}
+.switch::after{
+  content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
+  background:#fff;box-shadow:var(--e1);transition:transform var(--d-base) var(--e-out);
+}
+.switch[aria-checked="true"]{background:var(--brand-500)}
+.switch[aria-checked="true"]::after{transform:translateX(18px)}
+.stepper{display:inline-flex;align-items:center;border:1px solid var(--border);
+  border-radius:var(--r-sm);overflow:hidden;height:30px}
+.stepper button{border:0;background:var(--bg-surface);color:var(--text-2);width:28px;height:100%;
+  cursor:pointer;font-size:14px;line-height:1}
+.stepper button:hover{background:var(--bg-surface-3);color:var(--text-1)}
+.stepper span{min-width:44px;text-align:center;font-family:var(--font-mono);
+  font-size:var(--fs-xs);color:var(--text-1);border-left:1px solid var(--border);
+  border-right:1px solid var(--border);height:100%;line-height:28px}
+input[type=range]{width:120px;accent-color:var(--brand-500)}
+.drawer-foot{
+  flex:0 0 auto;display:flex;gap:var(--sp-4);padding:var(--sp-5) var(--sp-6);
+  border-top:1px solid var(--border-subtle);background:var(--bg-surface-2);
+}
+.drawer-foot .btn{flex:1}
+
+/* Toast */
+.toasts{position:fixed;right:20px;bottom:20px;display:flex;flex-direction:column;gap:8px;z-index:100}
+.toast{
+  display:flex;align-items:center;gap:10px;min-width:220px;max-width:340px;
+  padding:10px 14px;border-radius:var(--r-lg);background:var(--bg-surface);
+  box-shadow:var(--e3);font-size:var(--fs-xs);color:var(--text-1);
+  position:relative;overflow:hidden;
+  animation:toastIn var(--d-slow) var(--e-out);
+}
+.toast::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--brand-500)}
+.toast.ok::before{background:var(--success-500)}
+.toast.warn::before{background:var(--warning-500)}
+.toast.err::before{background:var(--danger-500)}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+
+/* ==========================================================================
+   设计系统视图
+   ========================================================================== */
+.ds{padding:var(--sp-10) var(--sp-8) var(--sp-12);max-width:1180px;margin:0 auto}
+.ds h2{
+  font-size:var(--fs-xl);line-height:var(--lh-xl);font-weight:var(--fw-semi);
+  margin:var(--sp-12) 0 var(--sp-5);letter-spacing:-.01em;
+}
+.ds h2:first-child{margin-top:0}
+.ds h5{
+  font-size:var(--fs-sm);font-weight:var(--fw-semi);margin:var(--sp-8) 0 var(--sp-4);color:var(--text-2);
+}
+.ds p.lead{color:var(--text-2);font-size:var(--fs-sm);max-width:70ch;margin:0 0 var(--sp-5)}
+.card{
+  background:var(--bg-surface);border-radius:var(--r-lg);box-shadow:var(--e2);
+  padding:var(--sp-7);
+}
+.grid{display:grid;gap:var(--sp-5)}
+.g-swatches{grid-template-columns:repeat(auto-fill,minmax(148px,1fr))}
+.sw{border-radius:var(--r-md);overflow:hidden;box-shadow:var(--e1);background:var(--bg-surface)}
+.sw .chip{height:60px;display:flex;align-items:flex-end;padding:8px}
+.sw .chip span{
+  font-family:var(--font-mono);font-size:var(--fs-micro);
+  background:rgba(255,255,255,.9);color:#14181D;padding:1px 5px;border-radius:4px;
+}
+.sw .meta{padding:8px 10px;border-top:1px solid var(--border-subtle)}
+.sw .meta b{display:block;font-size:var(--fs-xs);font-weight:var(--fw-medium)}
+.sw .meta span{font-family:var(--font-mono);font-size:var(--fs-micro);color:var(--text-3)}
+.g-type{grid-template-columns:1fr}
+.ts{display:flex;align-items:baseline;gap:var(--sp-5);padding:var(--sp-3) 0;
+  border-bottom:1px dashed var(--border-subtle)}
+.ts:last-child{border-bottom:0}
+.ts .tag2{font-family:var(--font-mono);font-size:var(--fs-micro);color:var(--text-3);width:150px;flex:0 0 auto}
+.g-space{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+.sp{display:flex;align-items:center;gap:10px;font-size:var(--fs-xs);color:var(--text-2)}
+.sp i{display:block;height:12px;border-radius:3px;background:var(--brand-500);opacity:.75}
+.g-radius{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+.rd{display:flex;align-items:center;gap:10px;font-size:var(--fs-xs);color:var(--text-2)}
+.rd i{width:56px;height:40px;background:var(--bg-surface);border:1px solid var(--border);display:block}
+.g-shadow{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+.sh{height:84px;background:var(--bg-surface);display:grid;place-items:center;
+  font-size:var(--fs-micro);color:var(--text-3);font-family:var(--font-mono)}
+.row-flex{display:flex;flex-wrap:wrap;gap:var(--sp-5);align-items:center}
+.stack{display:flex;flex-direction:column;gap:var(--sp-4);align-items:flex-start}
+.syn-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:var(--sp-4);
+  font-family:var(--font-mono);font-size:var(--fs-md)}
+.syn-list div{display:flex;align-items:center;gap:8px}
+.syn-list i{width:12px;height:12px;border-radius:3px;display:block}
+.mono{font-family:var(--font-mono);font-size:var(--fs-xs);color:var(--text-3)}
+.tree-sample{border:1px solid var(--border-subtle);border-radius:var(--r-md);overflow:hidden;
+  background:var(--bg-inset)}
+.a11y{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:var(--sp-5)}
+.a11y li{list-style:none}
+.a11y ul{margin:0;padding:0}
+.ck{display:flex;gap:8px;font-size:var(--fs-xs);color:var(--text-2)}
+.ck::before{content:"✓";color:var(--brand-500);font-weight:700}
+.red{border-left:3px solid var(--danger-500);padding-left:var(--sp-5)}
+.red h5{margin-top:0}
+.red code{font-family:var(--font-mono);font-size:var(--fs-xs);color:var(--text-2)}
+@media (max-width:1024px){
+  .workspace{grid-template-columns:1fr;grid-template-rows:1fr 8px 1fr}
+  .splitter{cursor:row-resize}
+  .splitter::before{top:50%;left:12px;right:12px;bottom:auto;width:auto;height:2px}
+  .keys{display:none}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- 原型外壳 -->
+  <header class="specbar">
+    <h1>JSON Duo · 界面重设计</h1>
+    <span class="tag">现代清爽 · 浅色优先</span>
+    <div class="seg" role="tablist" aria-label="视图切换">
+      <button role="tab" id="tabApp" aria-selected="true" aria-controls="viewApp">界面原型</button>
+      <button role="tab" id="tabDs" aria-selected="false" aria-controls="viewDs">设计系统</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="row-flex" style="gap:8px">
+      <span class="mono">主题</span>
+      <div class="seg" role="group" aria-label="主题">
+        <button id="thLight" aria-selected="true">浅色</button>
+        <button id="thDark" aria-selected="false">深色</button>
+      </div>
+      <span class="mono" style="margin-left:8px">密度</span>
+      <select id="density" aria-label="密度">
+        <option value="compact">紧凑 20px</option>
+        <option value="comfortable" selected>舒适 24px</option>
+        <option value="relaxed">宽松 28px</option>
+      </select>
+    </div>
+  </header>
+
+  <!-- ==================== 视图 1：界面原型 ==================== -->
+  <div class="view" id="viewApp" role="tabpanel" aria-labelledby="tabApp">
+  <div class="app" id="app">
+
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9 4H7.5A2.5 2.5 0 0 0 5 6.5v3A2.5 2.5 0 0 1 2.5 12 2.5 2.5 0 0 1 5 14.5v3A2.5 2.5 0 0 0 7.5 20H9"/>
+            <path d="M15 4h1.5A2.5 2.5 0 0 1 19 6.5v3A2.5 2.5 0 0 0 21.5 12 2.5 2.5 0 0 0 19 14.5v3A2.5 2.5 0 0 1 16.5 20H15"/>
+          </svg>
+        </span>
+        <span class="brand-text"><b>JSON Duo</b><em>粘贴即格式化</em></span>
+      </div>
+
+      <span class="keys">
+        <kbd>Ctrl</kbd><kbd>Enter</kbd><span class="t">格式化</span>
+        <span class="sep">·</span>
+        <kbd>F</kbd><span class="t">全屏</span>
+        <span class="sep">·</span>
+        <kbd>[</kbd><span class="t">输入栏</span>
+      </span>
+
+      <div class="topbar-tools">
+        <button class="btn btn-icon" id="btnSolo" aria-pressed="false" title="收起 / 展开输入栏">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2.5"/><line x1="9.5" y1="4.5" x2="9.5" y2="19.5"/>
+          </svg>
+        </button>
+        <button class="btn btn-icon" id="btnFs" aria-pressed="false" title="全屏（F）">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/>
+            <path d="M16 21h3a2 2 0 0 0 2-2v-3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/>
+          </svg>
+        </button>
+        <button class="btn btn-icon" id="btnSettings" title="设置（Ctrl+,）">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l-.06-.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <!-- 输入面板 -->
+      <section class="panel panel-input">
+        <header class="panel-head">
+          <span class="panel-title"><span class="dot dot-in"></span>输入</span>
+          <span class="panel-tools">
+            <button class="btn btn-sm" id="btnSample" title="载入示例">示例</button>
+            <button class="btn btn-sm btn-danger" id="btnClear" title="清空输入与结果">清空</button>
+            <span class="vsep"></span>
+            <button class="btn btn-sm btn-icon" id="btnOverflow" title="更多操作">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" aria-hidden="true">
+                <circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>
+              </svg>
+            </button>
+          </span>
+        </header>
+        <div class="panel-body">
+          <div class="editor-wrap">
+            <textarea id="input" spellcheck="false" aria-label="JSON 输入"></textarea>
+            <div class="drop-hint" id="dropHint">松手即可载入文件</div>
+          </div>
+        </div>
+        <footer class="panel-foot">
+          <span class="muted" id="stats">0 字符 · 0 行</span>
+          <span class="spacer-f"></span>
+          <span class="muted" id="fileInfo"></span>
+        </footer>
+      </section>
+
+      <div class="splitter" id="splitter" role="separator" aria-orientation="vertical"
+           tabindex="0" aria-label="调整左右宽度"><span class="grip"></span></div>
+
+      <!-- 结果面板 -->
+      <section class="panel panel-output">
+        <header class="panel-head">
+          <div class="seg" role="tablist" aria-label="结果视图">
+            <button role="tab" aria-selected="true" data-pane="tree">树</button>
+            <button role="tab" aria-selected="false" data-pane="compact">压缩</button>
+            <button role="tab" aria-selected="false" data-pane="raw">源码</button>
+          </div>
+          <span class="panel-tools">
+            <button class="btn btn-sm btn-icon" id="btnExpand" title="展开全部">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="8 9 12 5 16 9"/><polyline points="16 15 12 19 8 15"/>
+              </svg>
+            </button>
+            <button class="btn btn-sm btn-icon" id="btnCollapse" title="折叠全部">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="8 5 12 9 16 5"/><polyline points="16 19 12 15 8 19"/>
+              </svg>
+            </button>
+            <span class="vsep"></span>
+            <button class="btn btn-sm" id="btnCopy">复制</button>
+            <button class="btn btn-sm btn-icon" id="btnDownload" title="下载 .json">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3v12"/><polyline points="7 11 12 16 17 11"/><path d="M4 20h16"/>
+              </svg>
+            </button>
+            <span class="vsep"></span>
+            <span class="search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+              <input id="q" type="search" placeholder="搜索键或值" aria-label="搜索">
+              <span class="count" id="qCount"></span>
+            </span>
+          </span>
+        </header>
+        <div class="panel-body">
+          <div class="view-pane on" id="paneTree">
+            <div class="viewer" id="tree"></div>
+            <div class="welcome" id="welcome">
+              <svg viewBox="0 0 120 96" fill="none" aria-hidden="true">
+                <rect x="10" y="14" width="100" height="68" rx="10" stroke="currentColor" stroke-width="1.6" opacity=".3"/>
+                <path d="M22 34h18M22 46h34M22 58h26" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" opacity=".5"/>
+                <path d="M74 32l8 8-8 8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/>
+                <circle cx="60" cy="76" r="3" fill="currentColor" opacity=".5"/>
+              </svg>
+              <h2>等待粘贴</h2>
+              <p>左侧贴入一段 JSON，这里会实时渲染成可折叠、带语法高亮的树。</p>
+              <ul>
+                <li>解析失败会标出行号、列号与出错位置</li>
+                <li>大整数按原文保留，精度不丢失</li>
+                <li>可搜索、可折叠、可复制路径、可导出</li>
+              </ul>
+              <div class="welcome-actions">
+                <button class="btn btn-primary" id="btnSample2">载入示例</button>
+                <button class="btn btn-secondary" id="btnClear2">清空</button>
+              </div>
+            </div>
+          </div>
+          <div class="view-pane" id="paneCompact"><pre class="raw-text" id="compactText"></pre></div>
+          <div class="view-pane" id="paneRaw"><pre class="raw-text" id="rawText"></pre></div>
+        </div>
+        <footer class="panel-foot">
+          <span class="pill is-ok" id="statusPill" role="status" aria-live="polite">
+            <span class="pdot"></span><span id="pillText">已格式化</span>
+          </span>
+          <span class="foot-info" id="viewInfo">root › user</span>
+          <span class="spacer-f"></span>
+          <span class="muted" id="msg">24 节点 · 深度 3</span>
+        </footer>
+      </section>
+    </main>
+  </div>
+  </div>
+
+  <!-- ==================== 视图 2：设计系统 ==================== -->
+  <div class="view" id="viewDs" role="tabpanel" aria-labelledby="tabDs" hidden>
+  <div class="ds">
+
+    <h2>色彩系统</h2>
+    <p class="lead">中性色承载结构与留白，品牌绿只出现在「确认/成功/品牌标记」三处，语义色永不单独承载信息（一律配图标 + 文案）。</p>
+    <h5>中性 · 画布与表面</h5>
+    <div class="grid g-swatches" id="swNeutral"></div>
+    <h5>品牌与语义</h5>
+    <div class="grid g-swatches" id="swBrand"></div>
+    <h5>JSON 语法色（白底对比度均 ≥ 4.5:1）</h5>
+    <div class="card">
+      <div class="syn-list" id="synList"></div>
+      <div class="tree-sample" style="margin-top:16px" id="synPreview"></div>
+    </div>
+
+    <h2>字体排印</h2>
+    <div class="card"><div class="grid g-type" id="typeScale"></div></div>
+    <h5>字族</h5>
+    <div class="card row-flex" style="justify-content:space-between">
+      <div><div style="font-size:16px;font-weight:600">Inter / Segoe UI / 微软雅黑</div><div class="mono">--font-ui · 界面文字</div></div>
+      <div><div style="font-family:var(--font-mono);font-size:16px">JetBrains Mono { }</div><div class="mono">--font-mono · 代码与树行</div></div>
+    </div>
+
+    <h2>间距与圆角</h2>
+    <div class="card">
+      <div class="grid g-space" id="spList"></div>
+      <h5>圆角</h5>
+      <div class="grid g-radius" id="rList"></div>
+    </div>
+
+    <h2>阴影层级</h2>
+    <div class="grid g-shadow" id="shList"></div>
+
+    <h2>组件</h2>
+    <div class="card stack">
+      <h5 style="margin:0">按钮</h5>
+      <div class="row-flex">
+        <button class="btn btn-primary">格式化</button>
+        <button class="btn btn-secondary">载入示例</button>
+        <button class="btn btn-subtle">压缩</button>
+        <button class="btn">转义⇄还原</button>
+        <button class="btn btn-danger">清空</button>
+        <button class="btn" disabled>不可用</button>
+        <button class="btn btn-sm">小尺寸</button>
+      </div>
+      <div class="row-flex">
+        <button class="btn btn-icon" title="收起输入栏">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+               stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><line x1="9.5" y1="4.5" x2="9.5" y2="19.5"/></svg>
+        </button>
+        <span class="mono">图标按钮 32×32 · stroke 1.75 · 文字走 tooltip</span>
+      </div>
+      <h5 style="margin:var(--sp-6) 0 0">状态 pill</h5>
+      <div class="row-flex">
+        <span class="pill"><span class="pdot"></span>就绪</span>
+        <span class="pill is-ok"><span class="pdot"></span>已格式化 · 24 节点</span>
+        <span class="pill is-warn"><span class="pdot"></span>已修 2 处尾随逗号</span>
+        <span class="pill is-err"><span class="pdot"></span>第 12 行第 5 列</span>
+        <span class="pill is-info"><span class="pdot"></span>大文档 · 36 万行</span>
+      </div>
+      <h5 style="margin:var(--sp-6) 0 0">快捷键 chip</h5>
+      <div class="row-flex"><kbd>Ctrl</kbd><kbd>Enter</kbd><span class="mono">立即格式化</span></div>
+      <h5 style="margin:var(--sp-6) 0 0">分段控件 / 开关 / 步进器</h5>
+      <div class="row-flex">
+        <div class="seg"><button aria-selected="true">树</button><button aria-selected="false">压缩</button><button aria-selected="false">源码</button></div>
+        <button class="switch" role="switch" aria-checked="true" aria-label="显示行号"></button>
+        <button class="switch" role="switch" aria-checked="false" aria-label="排序键名"></button>
+        <span class="stepper"><button>−</button><span>14 px</span><button>+</button></span>
+        <input type="range" min="20" max="80" value="34" aria-label="分栏比例">
+      </div>
+    </div>
+
+    <h5>树行解剖</h5>
+    <div class="tree-sample" id="rowAnatomy"></div>
+
+    <h2>无障碍清单</h2>
+    <div class="card">
+      <ul class="a11y">
+        <li class="ck">正文对比度 ≥ 4.5:1，非文本组件 ≥ 3:1</li>
+        <li class="ck">focus-visible：2px 强调色环 + 2px 偏移</li>
+        <li class="ck">点击区 ≥ 32×32（树行整行可点）</li>
+        <li class="ck">抽屉 focus-trap，Esc 关闭并归还焦点</li>
+        <li class="ck">状态区 role="status" aria-live="polite"</li>
+        <li class="ck">树用 role="tree"/treeitem + aria-expanded/level</li>
+        <li class="ck">prefers-reduced-motion 全量降级</li>
+        <li class="ck">200% 缩放无横向滚动</li>
+      </ul>
+    </div>
+
+    <h2>落地红线</h2>
+    <div class="card red">
+      <h5>视觉改造不得触碰的 7 条</h5>
+      <p class="mono" style="line-height:2">
+        1. .jf-body → .jf-sizer → .jf-window 三层契约，滚动只改 translateY 与窗口内容，sizer 高度不变<br>
+        2. 行高即坐标系：ROW_H = round(fontSize × 1.7)，改字号/密度必须 layout() 重算<br>
+        3. 事件委托：整棵树仅一个 click 挂在 body，靠 data-i 反查行下标<br>
+        4. 首屏之后补画的行加 jf-late，不播动画<br>
+        5. 压缩视图 COMPACT_MAX 只是屏幕策略；复制/下载走 outputText() 必须全文<br>
+        6. 左右两栏底栏恒为 34px，必须等高<br>
+        7. 跳行/搜索走 revealRow(index)，禁止 indexOf 全表扫描
+      </p>
+    </div>
+
+  </div>
+  </div>
+</div>
+
+<!-- 抽屉 -->
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+  <div class="drawer-head">
+    <h3 id="drawerTitle">设置</h3>
+    <span class="spacer-f"></span>
+    <button class="btn btn-icon" id="btnCloseDrawer" aria-label="关闭设置">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round">
+        <path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="drawer-body">
+    <div class="group">
+      <h4>外观</h4>
+      <div class="opt"><span class="lbl"><b>主题</b><span>浅色 / 深色 / 跟随系统</span></span>
+        <span class="ctl"><select id="optTheme"><option>浅色</option><option>深色</option><option>跟随系统</option></select></span></div>
+      <div class="opt"><span class="lbl"><b>字体大小</b><span>代码与树行共用，影响行高</span></span>
+        <span class="ctl"><span class="stepper"><button>−</button><span>14 px</span><button>+</button></span></span></div>
+      <div class="opt"><span class="lbl"><b>行密度</b><span>紧凑 20 / 舒适 24 / 宽松 28</span></span>
+        <span class="ctl"><select id="optDensity"><option>紧凑</option><option selected>舒适</option><option>宽松</option></select></span></div>
+      <div class="opt"><span class="lbl"><b>显示行号</b><span>右侧钉列，等宽数字</span></span>
+        <span class="ctl"><button class="switch" role="switch" aria-checked="true" aria-label="显示行号"></button></span></div>
+    </div>
+    <div class="group">
+      <h4>格式化</h4>
+      <div class="opt"><span class="lbl"><b>缩进</b><span>2 / 4 空格或 Tab</span></span>
+        <span class="ctl"><select><option selected>2 空格</option><option>4 空格</option><option>Tab</option></select></span></div>
+      <div class="opt"><span class="lbl"><b>排序键名</b><span>按字母序重排对象键</span></span>
+        <span class="ctl"><button class="switch" role="switch" aria-checked="false" aria-label="排序键名"></button></span></div>
+      <div class="opt"><span class="lbl"><b>宽松解析</b><span>容忍注释、单引号、尾随逗号</span></span>
+        <span class="ctl"><button class="switch" role="switch" aria-checked="true" aria-label="宽松解析"></button></span></div>
+      <div class="opt"><span class="lbl"><b>自动格式化</b><span>停止输入后自动渲染</span></span>
+        <span class="ctl"><button class="switch" role="switch" aria-checked="true" aria-label="自动格式化"></button></span></div>
+    </div>
+    <div class="group">
+      <h4>大文档</h4>
+      <div class="opt"><span class="lbl"><b>切换阈值</b><span>超过后启用虚拟化视图</span></span>
+        <span class="ctl"><input type="range" min="200" max="2000" step="100" value="600" aria-label="阈值"><span class="mono">600KB</span></span></div>
+      <div class="opt"><span class="lbl"><b>页面自动接管上限</b><span>超过则不自动格式化 .json 页面</span></span>
+        <span class="ctl"><span class="mono">20 MB</span></span></div>
+    </div>
+    <div class="group">
+      <h4>快捷键</h4>
+      <div class="opt"><span class="lbl"><b>立即格式化</b></span><span class="ctl"><kbd>Ctrl</kbd><kbd>Enter</kbd></span></div>
+      <div class="opt"><span class="lbl"><b>搜索</b></span><span class="ctl"><kbd>Ctrl</kbd><kbd>K</kbd></span></div>
+      <div class="opt"><span class="lbl"><b>全屏</b></span><span class="ctl"><kbd>F</kbd></span></div>
+      <div class="opt"><span class="lbl"><b>收起输入栏</b></span><span class="ctl"><kbd>[</kbd></span></div>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn btn-secondary" id="btnReset">恢复默认</button>
+    <button class="btn btn-primary" id="btnApply">完成</button>
+  </div>
+</aside>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+/* ============================ 数据 & 示例 ============================ */
+const SAMPLE = {
+  "id": 10024,
+  "name": "JSON Duo",
+  "active": true,
+  "user": {
+    "name": "李若白",
+    "email": "lr3699@163.com",
+    "roles": ["admin", "editor"],
+    "profile": { "city": "杭州", "vip": true, "score": 98.5 }
+  },
+  "items": [
+    { "sku": "A-01", "qty": 3, "price": 19.9 },
+    { "sku": "B-07", "qty": 1, "price": 128 },
+    { "sku": "C-22", "qty": 12, "price": 4.5 }
+  ],
+  "note": "这是一段用于演示长值截断的字符串，超过 512 字符会被截断并在点击时复制全文。",
+  "updatedAt": null
+};
+
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/* ============================ 树构建 ============================ */
+/* 扁平行表：{i, depth, path, key, type, value, open, childCount, collapsible} */
+let ROWS = [];
+function build(obj) {
+  ROWS = [];
+  let i = 0;
+  function walk(v, key, depth, path) {
+    const row = { i: i++, depth, key, path, type: kind(v), value: v };
+    ROWS.push(row);
+    if (v && typeof v === 'object') {
+      const ks = Object.keys(v);
+      row.childCount = ks.length;
+      row.collapsible = true;
+      row.open = depth < 1 || Array.isArray(v);
+      const base = i;
+      ks.forEach(k => walk(v[k], k, depth + 1, path + '.' + k));
+      row.end = i - 1;
+      row.base = base;
+    }
+  }
+  walk(obj, null, 0, 'root');
+  return ROWS;
+}
+function kind(v) {
+  if (v === null) return 'null';
+  if (Array.isArray(v)) return 'array';
+  return typeof v; // object | string | number | boolean
+}
+const TICO = { array: '[]', object: '{}', string: '""', number: '#', boolean: '◇', null: '∅' };
+function valHtml(v, type) {
+  if (type === 'object' || type === 'array') return '';
+  if (type === 'null') return '<span class="v nul">null</span>';
+  if (type === 'boolean') return `<span class="v bool">${v}</span>`;
+  if (type === 'number') return `<span class="v num">${v}</span>`;
+  const s = `"${esc(v)}"`;
+  const long = s.length > 44;
+  return `<span class="v str${long ? ' trunc' : ''}" title="${esc(v)}">${long ? s.slice(0, 43) + '…' + '"' : s}</span>`;
+}
+
+let query = '';
+function render() {
+  const host = $('#tree');
+  const html = ROWS.map(r => {
+    const hidden = ROWS.some(p => p.collapsible && !p.open && r.path !== p.path && r.path.startsWith(p.path + '.'));
+    if (hidden) return '';
+    const ind = `<span class="row-indent" style="--d:${r.depth}"></span>`;
+    const caret = r.collapsible
+      ? `<button class="caret" data-i="${r.i}" aria-expanded="${r.open}" aria-label="折叠/展开"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></button>`
+      : '<span class="caret-space"></span>';
+    const key = r.key === null
+      ? `<span class="${r.type === 'array' ? 'p' : 'p'}">${r.type === 'array' ? '[' : '{'}</span>`
+      : `<span class="k">${hl(esc(r.key))}</span><span class="p">:</span>`;
+    const ico = `<span class="tico">${TICO[r.type]}</span>`;
+    const cnt = (r.collapsible && !r.open) ? `<span class="ct">${r.childCount} 项</span>` : '';
+    const ln = r.depth === 0 && !r.open ? '' : '';
+    return `<div class="row${r.open && r.collapsible ? ' open' : ''}" data-i="${r.i}" data-path="${r.path}" style="--d:${r.depth}">
+      ${ind}${caret}${ico}${key}${valHtml(r.value, r.type)}${cnt}<span class="ln">${r.i + 1}</span></div>`;
+  }).join('');
+  host.innerHTML = html;
+  $('#welcome').hidden = ROWS.length > 0;
+  host.hidden = ROWS.length === 0;
+  updateMatch();
+}
+function hl(t) {
+  if (!query) return t;
+  const idx = t.toLowerCase().indexOf(query.toLowerCase());
+  if (idx < 0) return t;
+  return t.slice(0, idx) + '<mark class="hl">' + t.slice(idx, idx + query.length) + '</mark>' + t.slice(idx + query.length);
+}
+function updateMatch() {
+  const rows = $$('#tree .row');
+  let n = 0;
+  rows.forEach(el => {
+    const hit = query && (el.dataset.path.toLowerCase().includes(query.toLowerCase()));
+    el.classList.toggle('dim', !!query && !hit);
+    if (hit) n++;
+  });
+  $('#qCount').textContent = query ? `${n} 处` : '';
+}
+build(SAMPLE);
+render();
+
+/* ============================ 输入 & 解析 ============================ */
+const input = $('#input');
+function setSample() {
+  input.value = JSON.stringify(SAMPLE, null, 2);
+  onInput();
+  toast('已载入示例数据', 'ok');
+}
+function onInput() {
+  const t = input.value;
+  const lines = t ? t.split('\n').length : 0;
+  $('#stats').textContent = `${t.length} 字符 · ${lines} 行`;
+  $('#rawText').textContent = t;
+  $('#compactText').textContent = t.trim() ? JSON.stringify(JSON.parse(t)) : '';
+  if (!t.trim()) { ROWS = []; render(); return; }
+  try {
+    const o = JSON.parse(t);
+    build(o); render();
+    setPill('ok', '已格式化');
+    let n = 0, maxd = 0;
+    ROWS.forEach(r => { n++; maxd = Math.max(maxd, r.depth); });
+    $('#msg').textContent = `${n} 节点 · 深度 ${maxd}`;
+    $('#viewInfo').textContent = 'root';
+  } catch (e) {
+    setPill('err', e.message.replace(/^JSON\.parse: /, ''));
+  }
+}
+function setPill(kind, text) {
+  const p = $('#statusPill');
+  p.className = 'pill ' + (kind === 'ok' ? 'is-ok' : kind === 'err' ? 'is-err' : kind === 'warn' ? 'is-warn' : 'is-info');
+  $('#pillText').textContent = text;
+}
+input.addEventListener('input', onInput);
+$('#btnSample').onclick = setSample;
+$('#btnSample2').onclick = setSample;
+$('#btnClear').onclick = $('#btnClear2').onclick = () => {
+  input.value = ''; onInput(); ROWS = []; render(); toast('已清空', 'ok');
+};
+
+/* ============================ 树交互（事件委托） ============================ */
+$('#tree').addEventListener('click', e => {
+  const btn = e.target.closest('.caret');
+  if (btn) {
+    const i = +btn.dataset.i;
+    ROWS[i].open = !ROWS[i].open;
+    render();
+    return;
+  }
+  const row = e.target.closest('.row');
+  if (!row) return;
+  $$('#tree .row.is-sel').forEach(r => r.classList.remove('is-sel'));
+  row.classList.add('is-sel');
+  const r = ROWS[+row.dataset.i];
+  $('#viewInfo').textContent = r ? r.path : '';
+});
+$('#btnExpand').onclick = () => { ROWS.forEach(r => r.collapsible && (r.open = true)); render(); };
+$('#btnCollapse').onclick = () => { ROWS.forEach(r => r.collapsible && (r.open = false)); render(); };
+$('#q').addEventListener('input', e => { query = e.target.value.trim(); render(); });
+
+/* ============================ 视图切换 & 复制 ============================ */
+$$('.panel-output .seg [role=tab]').forEach(b => b.onclick = () => {
+  $$('.panel-output .seg [role=tab]').forEach(x => x.setAttribute('aria-selected', String(x === b)));
+  ['tree', 'compact', 'raw'].forEach(p => $('#pane' + p[0].toUpperCase() + p.slice(1)).classList.toggle('on', p === b.dataset.pane));
+});
+function flash(btn, done) {
+  const old = btn.textContent;
+  btn.textContent = done; btn.classList.add('is-done');
+  setTimeout(() => { btn.textContent = old; btn.classList.remove('is-done'); }, 1200);
+}
+$('#btnCopy').onclick = () => {
+  navigator.clipboard?.writeText(JSON.stringify(SAMPLE, null, 2)).catch(() => {});
+  flash($('#btnCopy'), '已复制'); toast('已复制到剪贴板（完整全文）', 'ok');
+};
+$('#btnDownload').onclick = () => toast('已导出 formatted.json', 'ok');
+$('#btnOverflow').onclick = () => toast('更多操作：中文⇄\\uXXXX / 转义⇄还原 / 压缩', 'info');
+
+/* ============================ 布局控制 ============================ */
+$('#btnSolo').onclick = () => {
+  const on = $('#app').classList.toggle('is-solo');
+  $('#btnSolo').setAttribute('aria-pressed', String(on));
+};
+$('#btnFs').onclick = () => {
+  const on = $('#app').classList.toggle('is-fullscreen');
+  $('#btnFs').setAttribute('aria-pressed', String(on));
+};
+
+/* 分隔条拖拽 */
+(function () {
+  const sp = $('#splitter');
+  let drag = false;
+  sp.addEventListener('pointerdown', e => { drag = true; sp.classList.add('is-drag'); sp.setPointerCapture(e.pointerId); });
+  sp.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const ws = $('.workspace').getBoundingClientRect();
+    const p = Math.min(70, Math.max(18, ((e.clientX - ws.left) / ws.width) * 100));
+    document.documentElement.style.setProperty('--split', p.toFixed(2) + '%');
+  });
+  sp.addEventListener('pointerup', () => { drag = false; sp.classList.remove('is-drag'); });
+  sp.addEventListener('dblclick', () => document.documentElement.style.setProperty('--split', '34%'));
+  sp.addEventListener('keydown', e => {
+    const cur = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--split'));
+    if (e.key === 'ArrowLeft') document.documentElement.style.setProperty('--split', Math.max(18, cur - 2) + '%');
+    if (e.key === 'ArrowRight') document.documentElement.style.setProperty('--split', Math.min(70, cur + 2) + '%');
+  });
+})();
+
+/* ============================ 抽屉 ============================ */
+let lastFocus = null;
+function openDrawer() {
+  lastFocus = document.activeElement;
+  $('#drawer').classList.add('on'); $('#scrim').classList.add('on');
+  setTimeout(() => $('#btnCloseDrawer').focus(), 60);
+}
+function closeDrawer() {
+  $('#drawer').classList.remove('on'); $('#scrim').classList.remove('on');
+  lastFocus?.focus();
+}
+$('#btnSettings').onclick = openDrawer;
+$('#btnCloseDrawer').onclick = closeDrawer;
+$('#scrim').onclick = closeDrawer;
+$('#btnApply').onclick = () => { closeDrawer(); toast('设置已保存', 'ok'); };
+$('#btnReset').onclick = () => toast('已恢复默认设置', 'warn');
+$$('.switch').forEach(s => s.onclick = () => s.setAttribute('aria-checked', String(s.getAttribute('aria-checked') !== 'true')));
+
+/* ============================ 主题 / 密度 ============================ */
+function setTheme(t) {
+  document.documentElement.dataset.theme = t;
+  $('#thLight').setAttribute('aria-selected', String(t === 'light'));
+  $('#thDark').setAttribute('aria-selected', String(t === 'dark'));
+  $('#optTheme').value = t === 'light' ? '浅色' : '深色';
+}
+$('#thLight').onclick = () => setTheme('light');
+$('#thDark').onclick = () => setTheme('dark');
+$('#optTheme').onchange = e => setTheme(e.target.value === '深色' ? 'dark' : 'light');
+$('#density').onchange = e => { document.documentElement.dataset.density = e.target.value; };
+$('#optDensity').onchange = e => {
+  const m = { '紧凑': 'compact', '舒适': 'comfortable', '宽松': 'relaxed' };
+  document.documentElement.dataset.density = m[e.target.value];
+  $('#density').value = m[e.target.value];
+};
+$$('.stepper').forEach(st => {
+  const span = st.querySelector('span');
+  $$('button', st).forEach((b, idx) => b.onclick = () => {
+    let n = parseInt(span.textContent);
+    n = idx === 0 ? Math.max(11, n - 1) : Math.min(20, n + 1);
+    span.textContent = n + ' px';
+    document.documentElement.style.setProperty('--fs-md', n + 'px');
+  });
+});
+
+/* ============================ 视图切换（原型外壳） ============================ */
+$('#tabApp').onclick = () => {
+  $('#viewApp').hidden = false; $('#viewDs').hidden = true;
+  $('#tabApp').setAttribute('aria-selected', 'true'); $('#tabDs').setAttribute('aria-selected', 'false');
+};
+$('#tabDs').onclick = () => {
+  $('#viewApp').hidden = true; $('#viewDs').hidden = false;
+  $('#tabDs').setAttribute('aria-selected', 'true'); $('#tabApp').setAttribute('aria-selected', 'false');
+};
+
+/* ============================ 快捷键 ============================ */
+document.addEventListener('keydown', e => {
+  const typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); onInput(); toast('已格式化', 'ok'); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key === ',') { e.preventDefault(); openDrawer(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('#q').focus(); return; }
+  if (typing) return;
+  if (e.key === 'f' || e.key === 'F') $('#btnFs').click();
+  if (e.key === '[') $('#btnSolo').click();
+  if (e.key === 'Escape') { closeDrawer(); if ($('#app').classList.contains('is-fullscreen')) $('#app').classList.remove('is-fullscreen'); }
+});
+
+/* ============================ Toast ============================ */
+function toast(text, kind = 'ok') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + kind;
+  el.textContent = text;
+  $('#toasts').appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateY(6px)'; }, 2800);
+  setTimeout(() => el.remove(), 3200);
+  while ($('#toasts').children.length > 3) $('#toasts').firstChild.remove();
+}
+
+/* ============================ 设计系统视图渲染 ============================ */
+const cs = getComputedStyle(document.documentElement);
+const T = n => cs.getPropertyValue(n).trim();
+function swatchGrid(host, list) {
+  host.innerHTML = list.map(([name, token, hex]) => `
+    <div class="sw">
+      <div class="chip" style="background:${hex}"><span>${hex}</span></div>
+      <div class="meta"><b>${name}</b><span>${token}</span></div>
+    </div>`).join('');
+}
+swatchGrid($('#swNeutral'), [
+  ['画布', '--bg-canvas', T('--bg-canvas')],
+  ['面板', '--bg-surface', T('--bg-surface')],
+  ['面板头/底', '--bg-surface-2', T('--bg-surface-2')],
+  ['Hover / Chip', '--bg-surface-3', T('--bg-surface-3')],
+  ['代码内底', '--bg-inset', T('--bg-inset')],
+  ['极弱描边', '--border-subtle', T('--border-subtle')],
+  ['常规描边', '--border', T('--border')],
+  ['强描边', '--border-strong', T('--border-strong')],
+  ['主文本', '--text-1', T('--text-1')],
+  ['次文本', '--text-2', T('--text-2')],
+  ['辅助文本', '--text-3', T('--text-3')]
+]);
+swatchGrid($('#swBrand'), [
+  ['品牌浅底', '--brand-100', T('--brand-100')],
+  ['品牌主色', '--brand-500', T('--brand-500')],
+  ['品牌 Hover', '--brand-600', T('--brand-600')],
+  ['强调 / 焦点', '--accent-500', T('--accent-500')],
+  ['成功', '--success-500', T('--success-500')],
+  ['警告', '--warning-500', T('--warning-500')],
+  ['错误', '--danger-500', T('--danger-500')],
+  ['信息', '--info-500', T('--info-500')]
+]);
+$('#synList').innerHTML = [
+  ['键名', '--syn-key'], ['字符串', '--syn-string'], ['数字', '--syn-number'],
+  ['布尔', '--syn-boolean'], ['null', '--syn-null'], ['标点', '--syn-punct']
+].map(([n, t]) => {
+  const c = T(t);
+  return `<div><i style="background:${c}"></i><span style="color:${c}">${n}</span><span class="mono">${c}</span></div>`;
+}).join('');
+$('#synPreview').innerHTML = [
+  `<div class="row" style="--d:0"><span class="row-indent" style="--d:0"></span><span class="caret-space"></span><span class="tico">{}</span><span class="p">{</span><span class="ln">1</span></div>`,
+  `<div class="row open" style="--d:1"><span class="row-indent" style="--d:1"></span><span class="caret-space"></span><span class="tico">""</span><span class="k">name</span><span class="p">:</span><span class="v str">"JSON Duo"</span><span class="ln">2</span></div>`,
+  `<div class="row open" style="--d:1"><span class="row-indent" style="--d:1"></span><span class="caret-space"></span><span class="tico">#</span><span class="k">version</span><span class="p">:</span><span class="v num">1.7</span><span class="ln">3</span></div>`,
+  `<div class="row open" style="--d:1"><span class="row-indent" style="--d:1"></span><span class="caret-space"></span><span class="tico">◇</span><span class="k">active</span><span class="p">:</span><span class="v bool">true</span><span class="ln">4</span></div>`,
+  `<div class="row open" style="--d:1"><span class="row-indent" style="--d:1"></span><span class="caret-space"></span><span class="tico">∅</span><span class="k">parent</span><span class="p">:</span><span class="v nul">null</span><span class="ln">5</span></div>`
+].join('');
+$('#typeScale').innerHTML = [
+  ['--fs-2xl 28/36', 'font-size:28px;line-height:36px;font-weight:600', '抽屉主标题'],
+  ['--fs-xl 20/28', 'font-size:20px;line-height:28px;font-weight:600', '空状态标题'],
+  ['--fs-lg 16/24', 'font-size:16px;line-height:24px;font-weight:600', '抽屉分组标题'],
+  ['--fs-md 14/22', 'font-size:14px;line-height:22px', '代码与树行默认（行高 = 14 × 1.7 ≈ 24）'],
+  ['--fs-sm 13/20', 'font-size:13px;line-height:20px;font-weight:500', 'UI 默认：按钮、面板标题'],
+  ['--fs-xs 12/18', 'font-size:12px;line-height:18px', '底栏、tooltip、路径'],
+  ['--fs-micro 11/16', 'font-size:11px;line-height:16px', '徽标、快捷键 chip']
+].map(([tag, css, use]) => `<div class="ts"><span class="tag2">${tag}</span><span style="${css}">JSON Duo 格式化</span><span class="mono">${use}</span></div>`).join('');
+$('#spList').innerHTML = [2, 4, 6, 8, 12, 14, 16, 20, 24, 32, 40, 48]
+  .map(v => `<div class="sp"><i style="width:${v}px"></i>${v}px</div>`).join('');
+$('#rList').innerHTML = [['xs', 6], ['sm', 8], ['md', 10], ['lg', 12], ['xl', 16]]
+  .map(([n, v]) => `<div class="rd"><i style="border-radius:${v}px"></i>--r-${n} · ${v}px</div>`).join('');
+$('#shList').innerHTML = [['e1', 'var(--e1)', '分隔/chip'], ['e2', 'var(--e2)', '面板'], ['e3', 'var(--e3)', '下拉 / Toast'], ['e4', 'var(--e4)', '抽屉 / 模态']]
+  .map(([n, v, use]) => `<div class="sh" style="box-shadow:${v}">${n} — ${use}</div>`).join('');
+$('#rowAnatomy').innerHTML = [
+  `<div class="row" style="--d:0"><span class="row-indent" style="--d:0"></span><span class="caret-space"></span><span class="tico">{}</span><span class="p">{</span><span class="ln">1</span></div>`,
+  `<div class="row open" style="--d:1"><span class="row-indent" style="--d:1"></span><span class="caret-space"></span><span class="tico">{}</span><span class="k">user</span><span class="p">:</span><span class="p">{</span><span class="ln">2</span></div>`,
+  `<div class="row open is-sel" style="--d:2"><span class="row-indent" style="--d:2"></span><span class="caret-space"></span><span class="tico">""</span><span class="k">email</span><span class="p">:</span><span class="v str">"lr3699@163.com"</span><span class="ln">3</span></div>`,
+  `<div class="row open" style="--d:2"><span class="row-indent" style="--d:2"></span><span class="caret-space"></span><span class="tico">[]</span><span class="k">roles</span><span class="p">:</span><span class="p">[</span><span class="ct">2 项</span><span class="ln">4</span></div>`
+].join('') + `<div class="mono" style="padding:10px 14px;border-top:1px solid var(--border-subtle)">
+  行高 24px（= 14px × 1.7）· 缩进 16px/层（--jf-depth）· 参考线用 repeating-linear-gradient 裁剪，不生成嵌套 DOM · 行号钉列等宽数字</div>`;
+
+/* 初始载入示例 */
+setSample();
+</script>
+</body>
+</html>
