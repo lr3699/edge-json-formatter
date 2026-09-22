@@ -19,6 +19,7 @@ import { json } from '@codemirror/lang-json';
 import {
   HighlightStyle, syntaxHighlighting, codeFolding, foldGutter, foldKeymap,
   foldAll, unfoldAll, foldCode, unfoldCode, toggleFold, foldEffect,
+  foldable, unfoldEffect, foldState, syntaxTree,
 } from '@codemirror/language';
 import { search, searchKeymap, openSearchPanel, closeSearchPanel, findNext, findPrevious } from '@codemirror/search';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
@@ -29,6 +30,7 @@ export {
   keymap, json,
   HighlightStyle, syntaxHighlighting, codeFolding, foldGutter, foldKeymap,
   foldAll, unfoldAll, foldCode, unfoldCode, toggleFold, foldEffect,
+  foldable, unfoldEffect, foldState, syntaxTree,
   search, searchKeymap, openSearchPanel, closeSearchPanel, findNext, findPrevious,
   defaultKeymap, history, historyKeymap, indentWithTab,
   t as tags,

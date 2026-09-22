@@ -385,14 +385,69 @@
       return view ? view.state.doc.toString() : '';
     }
 
+    /**
+     * 折叠全部：CM6 自带的 foldAll 在这里有时不生效（对 JSON 大文档只折叠顶层），
+     * 改成手动枚举每一行，把能折叠的范围全压上 foldEffect。
+     */
+    function foldAllView() {
+      if (!view) return false;
+      var st = view.state;
+      var doc = st.doc;
+      var effects = [];
+      for (var i = 1; i <= doc.lines; i++) {
+        var line = doc.line(i);
+        var range = CM.foldable(st, line.from, line.to);
+        if (range && range.from < range.to) {
+          effects.push(CM.foldEffect.of(range));
+        }
+      }
+      if (!effects.length) return false;
+      view.dispatch({ effects: effects });
+      view.focus();
+      return true;
+    }
+
+    /**
+     * 展开全部：从 foldState 字段里读出所有已折叠区间，逐个 unfoldEffect。
+     * 这比 CM.unfoldAll(view) 更稳——至少不会受制于是不是「顶层」。
+     */
+    function unfoldAllView() {
+      if (!view) return false;
+      var st = view.state;
+      var field;
+      try {
+        field = st.field(CM.foldState);
+      } catch (e) {
+        // foldState 字段不存在意味着没有折叠
+        return false;
+      }
+      if (!effects.length) return false;
+      var field;
+      try {
+        field = st.field(CM.foldState);
+      } catch (e) {
+        // foldState 字段缺失 = 压根没折叠过
+        return false;
+      }
+      if (!field) return false;
+      // between() 比手工 iter() 稳：回调直接给出区间两端，不用去摸迭代器内部字段
+      field.between(0, st.doc.length, function (from) {
+        effects.push(CM.unfoldEffect.of(from));
+      });
+      if (!effects.length) return false;
+      view.dispatch({ effects: effects });
+      view.focus();
+      return true;
+    }
+
     return {
       setText: setText,
       format: format,
       setOptions: setOptions,
       getState: getState,
       getText: getText,
-      foldAll: function () { if (view) CM.foldAll(view); },
-      unfoldAll: function () { if (view) CM.unfoldAll(view); },
+      foldAll: foldAllView,
+      unfoldAll: unfoldAllView,
       openSearch: function () { if (view) CM.openSearchPanel(view); },
       focus: function () { if (view) view.focus(); },
       destroy: function () { if (view) { view.destroy(); view = null; } },
