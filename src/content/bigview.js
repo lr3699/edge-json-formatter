@@ -322,6 +322,8 @@
         state: CM.EditorState.create({ doc: out, extensions: extensions() }),
         parent: host,
       });
+      /* 测试钩子：让验收脚本能摸到 CM 实例（foldState / syntaxTree 等内部状态） */
+      host.__jfView = view;
 
       state.rows = view.state.doc.lines;
       state.chars = out.length;
@@ -386,53 +388,84 @@
     }
 
     /**
-     * 折叠全部：CM6 自带的 foldAll 在这里有时不生效（对 JSON 大文档只折叠顶层），
-     * 改成手动枚举每一行，把能折叠的范围全压上 foldEffect。
+     * 扫描全文，数出「最外层」可折叠块（开括号行 → 闭括号行）。
+     * 不用 CM.foldable：syntaxTree 是惰性解析的，大文档只解析视口附近，
+     * 未解析区域 foldable 返回 null —— 这正是「折叠全部只折了顶部一段」的根因。
+     * 单遍字符扫描自带字符串/转义状态机，与语法树无关，O(n)。
+     */
+    function collectOuterFolds(text) {
+      var pairs = [];
+      var stack = [];
+      var line = 0;
+      var inStr = false;
+      var esc = false;
+      for (var i = 0; i < text.length; i++) {
+        var c = text.charCodeAt(i);
+        if (inStr) {
+          if (esc) esc = false;
+          else if (c === 92) esc = true;          /* 反斜杠：下一个字符是转义 */
+          else if (c === 34 || c === 10) inStr = false;  /* 引号闭合；裸换行视作坏字符串兜底 */
+          continue;
+        }
+        if (c === 34) { inStr = true; continue; }  /* " */
+        if (c === 123 || c === 91) stack.push(line);         /* { [ */
+        else if (c === 125 || c === 93) {                    /* } ] */
+          var open = stack.pop();
+          if (open != null && line > open) pairs.push(open, line);
+        } else if (c === 10) line++;
+      }
+      if (!pairs.length) return [];
+      /* JSON 块严格嵌套：按开行排序后贪心只留最外层。
+         内层折叠点会被外层折叠整体藏起来，压重叠的 foldEffect 没有意义。 */
+      var idx = [];
+      for (var k = 0; k < pairs.length; k += 2) idx.push([pairs[k], pairs[k + 1]]);
+      idx.sort(function (a, b) { return a[0] - b[0] || b[1] - a[1]; });
+      var out = [];
+      var lastTo = -1;
+      for (var k2 = 0; k2 < idx.length; k2++) {
+        if (idx[k2][0] > lastTo) { out.push(idx[k2]); lastTo = idx[k2][1]; }
+      }
+      return out;
+    }
+
+    /**
+     * 折叠全部：对每个最外层块压 foldEffect（从开括号行尾到闭括号行首）。
+     * 返回压上的折叠数；一个都折不了时返回 0。
      */
     function foldAllView() {
-      if (!view) return false;
+      if (!view) return 0;
       var st = view.state;
       var doc = st.doc;
+      var blocks = collectOuterFolds(doc.toString());
       var effects = [];
-      for (var i = 1; i <= doc.lines; i++) {
-        var line = doc.line(i);
-        var range = CM.foldable(st, line.from, line.to);
-        if (range && range.from < range.to) {
-          effects.push(CM.foldEffect.of(range));
-        }
+      for (var i = 0; i < blocks.length; i++) {
+        var from = doc.line(blocks[i][0] + 1).to;   /* 开括号所在行的行尾 */
+        var to = doc.line(blocks[i][1] + 1).from;   /* 闭括号所在行的行首 */
+        if (to > from) effects.push(CM.foldEffect.of({ from: from, to: to }));
       }
-      if (!effects.length) return false;
+      if (!effects.length) return 0;
       view.dispatch({ effects: effects });
       view.focus();
-      return true;
+      return effects.length;
     }
 
     /**
      * 展开全部：从 foldState 字段里读出所有已折叠区间，逐个 unfoldEffect。
-     * 这比 CM.unfoldAll(view) 更稳——至少不会受制于是不是「顶层」。
+     * 注意 unfoldEffect 和 foldEffect 一样吃 {from,to} 区间，不是单个位置。
      */
     function unfoldAllView() {
       if (!view) return false;
       var st = view.state;
-      var field;
+      var field = null;
       try {
-        field = st.field(CM.foldState);
+        field = st.field(CM.foldState, false);
       } catch (e) {
-        // foldState 字段不存在意味着没有折叠
-        return false;
-      }
-      if (!effects.length) return false;
-      var field;
-      try {
-        field = st.field(CM.foldState);
-      } catch (e) {
-        // foldState 字段缺失 = 压根没折叠过
-        return false;
+        field = null;
       }
       if (!field) return false;
-      // between() 比手工 iter() 稳：回调直接给出区间两端，不用去摸迭代器内部字段
-      field.between(0, st.doc.length, function (from) {
-        effects.push(CM.unfoldEffect.of(from));
+      var effects = [];
+      field.between(0, st.doc.length, function (from, to) {
+        effects.push(CM.unfoldEffect.of({ from: from, to: to }));
       });
       if (!effects.length) return false;
       view.dispatch({ effects: effects });
@@ -450,7 +483,10 @@
       unfoldAll: unfoldAllView,
       openSearch: function () { if (view) CM.openSearchPanel(view); },
       focus: function () { if (view) view.focus(); },
-      destroy: function () { if (view) { view.destroy(); view = null; } },
+      destroy: function () {
+        if (view) { view.destroy(); view = null; }
+        try { delete host.__jfView; } catch (e) { host.__jfView = null; }
+      },
       /** 大视图没有「复制值」这类节点级交互，调用方据此隐藏对应按钮 */
       isBig: true,
     };
