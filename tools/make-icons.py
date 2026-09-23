@@ -7,7 +7,7 @@
     扩展工具栏 / 标签页图标就是 16px。16px 方格内「JSON」四字母的墨迹高度只有
     约 3 个物理像素、单笔画不足 1px，任何字体都只能糊成一条白线；角括号 16/512 的
     线宽在 16px 下仅 0.5px，被抗锯齿磨没。根因是信息密度，调字号无解。
-    → **16/32 改用一对花括号「{ }」分置左右边做主形；48px 起才用完整字标「JSON」+ 角括号。**
+    → **16/32 改用加粗单字母「J」做主形；48px 起才用完整字标「JSON」+ 角括号。**
 
 方案：SVG 矢量母版（512 viewBox）→ 本地 Edge 渲染 → CDP Page.captureScreenshot
 按 clip 逐尺寸截图，直接产出 icons/ 下的成品 PNG，无第三方依赖。
@@ -44,17 +44,18 @@ FONT_WEIGHT = 700
 
 BIG_TEXT = "JSON"             # 大尺寸字标正文（48px 起）
 BIG_FILL = 0.62               # 大尺寸「JSON」字宽占版面比例（两侧须给角括号让净空）
-# 小尺寸主形（16 / 32px）——**方案 E**：一对花括号分置左右边、中间留空。
-# 花括号自身笔画重、开口大，分置后两根竖笔互不干扰，16px 下仍读得出「{ }」；
-# 且它就是 JSON 的语法符号，语义比单字母强（单字母那版是方案 D）。
-SMALL_BRACE_H = 0.88          # 花括号墨迹高度占版面比例
-SMALL_BRACE_X = 0.055         # 左括号左边缘距版面边缘（占版面比例）
+# 小尺寸主形（16 / 32px）——**方案 D**：加粗单字母「J」。
+# 16px 只需承载一个字形，笔画才做得够重（描边后有效笔画宽度可达 2 物理像素以上），
+# 辨识度优先于语义完整（语义优先那版是方案 E 的花括号 { }）。
+SMALL_TEXT = "J"              # 小尺寸主形（16/32px）——四字母在此尺寸必然糊
+SMALL_H = 0.74                # 小尺寸主形墨迹高度占版面比例
+SMALL_W = 0.66                # 小尺寸主形墨迹宽度上限
 SMALL_THRESHOLD = 32          # ≤ 此尺寸走小尺寸主形
 PROBE_FS = 100                # 测量用字号
 
-# 小尺寸描边量（viewBox 单位）：只补一点点。
-# **切勿给花括号补大描边**——≥40/512 时两根竖笔会与中钩粘连成一块白（方案 B 的实测结论）。
-SMALL_STROKE = {16: 16, 32: 8}
+# 小尺寸描边量（viewBox 单位）：16px 下 26/512 ≈ 0.81px 额外笔画。
+# 只给单字母补——字母笔画本身偏细；花括号那类重笔画字形切勿描边，会与中钩粘连成白块。
+SMALL_STROKE = {16: 26, 32: 12}
 
 # 角括号「」（U+300C / U+300D）用矢量路径画：
 #   CJK 字体里的角括号是全角字形、字重与拉丁黑体不匹配，直接排版会把字号压小；
@@ -99,21 +100,17 @@ def marks_for(size, M, force_small=None, stroke=None):
     """
     small = (size <= SMALL_THRESHOLD) if force_small is None else force_small
     if small:
-        # 方案 E：两个花括号贴上左右边、中间留空。字号由**花括号自己的墨迹高**反算
-        # （不是字母的），左右括号共用同一份度量，字号与基线才严格一致——
-        # 「{」「}」虽是镜像字形，各取各的度量一旦有差就会上下错位。
-        a_per, d_per = M["lb"][1], M["lb"][2]
-        fs = SMALL_BRACE_H * VB / (a_per + d_per)
-        cx = SMALL_BRACE_X * VB + M["lb"][0] * fs / 2
+        # 方案 D：单个加粗字母 J。字号由**字母自身墨迹**反算——同时受宽度上限与
+        # 高度目标约束，取更严的那个，避免字形被横向压扁或顶出安全边距。
+        w_per, a_per, d_per = M["small"]
+        fs = min(SMALL_W * VB / w_per, SMALL_H * VB / (a_per + d_per))
         stroke = SMALL_STROKE.get(size, 0) if stroke is None else stroke
         baseline = (VB - (a_per + d_per) * fs) / 2.0 + a_per * fs
-        tpl = ('<text x="%.2f" y="%.2f" text-anchor="middle" '
-               'style="font-family:%s;font-weight:%d;font-size:%.3fpx;fill:%s;'
-               'stroke:%s;stroke-width:%d;paint-order:stroke;stroke-linejoin:round">'
-               '%s</text>')
-        style = (FONT, FONT_WEIGHT, fs, FG, FG, stroke)
-        return (tpl % ((cx, baseline) + style + ("{",)) +
-                tpl % ((VB - cx, baseline) + style + ("}",)))
+        return ('<text x="%.1f" y="%.2f" text-anchor="middle" '
+                'style="font-family:%s;font-weight:%d;font-size:%.3fpx;fill:%s;'
+                'stroke:%s;stroke-width:%d;paint-order:stroke;stroke-linejoin:round">'
+                '%s</text>'
+                % (VB / 2, baseline, FONT, FONT_WEIGHT, fs, FG, FG, stroke, SMALL_TEXT))
     m = M["big"]
     fs = BIG_FILL * VB / m[0]
     baseline = (VB - (m[1] + m[2]) * fs) / 2.0 + m[1] * fs
@@ -159,14 +156,14 @@ def ev(client, expr):
 
 
 def measure(c):
-    """量字形墨迹（以「字号=1」为单位）。返回 {'big': ..., 'lb': ..., 'rb': ...}。"""
+    """量字形墨迹（以「字号=1」为单位）。返回 {'big': ..., 'small': ...}。"""
     tmp = ROOT / "dist" / "_icon-probe.html"
     tmp.parent.mkdir(exist_ok=True)
     tmp.write_text('<!DOCTYPE html><html><head><meta charset="utf-8"></head>'
                    '<body></body></html>', encoding="utf-8")
     c.navigate(tmp.as_uri(), timeout=30.0)
     c.wait_for("document.readyState==='complete'", timeout=15)
-    texts = [BIG_TEXT, "{", "}"]
+    texts = [BIG_TEXT, SMALL_TEXT]
     js = ("(function(){var cv=document.createElement('canvas');var x=cv.getContext('2d');"
           "x.font='%d %dpx '+%s;var out={};%s.forEach(function(t){"
           "var m=x.measureText(t);out[t]=[m.width/%d,m.actualBoundingBoxAscent/%d,"
@@ -175,10 +172,10 @@ def measure(c):
              PROBE_FS, PROBE_FS, PROBE_FS))
     mt = json.loads(ev(c, js))
     tmp.unlink()
-    out = {"big": mt[BIG_TEXT], "lb": mt["{"], "rb": mt["}"]}
-    for k, label in (("big", BIG_TEXT), ("lb", "{"), ("rb", "}")):
+    out = {"big": mt[BIG_TEXT], "small": mt[SMALL_TEXT]}
+    for k, label in (("big", BIG_TEXT), ("small", SMALL_TEXT)):
         v = out[k]
-        print("度量 %-4s %-5s 字宽 %.3f 墨迹上 %.3f 下 %.3f" % (k, label, v[0], v[1], v[2]))
+        print("度量 %-5s %-5s 字宽 %.3f 墨迹上 %.3f 下 %.3f" % (k, label, v[0], v[1], v[2]))
     return out
 
 
@@ -250,7 +247,7 @@ def applied_page(pairs, fav_rows):
             '<h1>JSON Duo 图标 · 改前 / 改后（真实尺寸）</h1>'
             '<p class="lede">前两条是<b>真实尺寸</b>的 16px 工具栏实景（浅色 / 深色主题），'
             '这是唯一的判断依据；后面是 16px 放大 8 倍与 32 / 48 / 128 的实际尺寸。'
-            '改后：<b>16/32px 换成一对花括号 { }（分置左右边、中间留空）</b>'
+            '改后：<b>16/32px 换成加粗单字母 J</b>'
             '（四字母在此尺寸墨迹仅约 3 物理像素，必然糊），'
             '48px 起保持完整字标 <b>「JSON」</b> + 角括号，品牌观感延续。</p>%s'
             '<div class="split"></div>'
@@ -355,8 +352,8 @@ def main():
             '</style></head><body>'
             '<h1>JSON Duo 图标 —— 分尺寸两档图形语言</h1>'
             '<p class="sub">黑色圆角底（%s → %s 的极浅渐变，纯黑不至于发死）。'
-            '<b>16px / 32px</b> 用一对花括号 <b>{ }</b>（墨迹高 %.0f%% 版面，分置左右边、'
-            '中间留空、只补极少描边）——四字母字标在 16px 下'
+            '<b>16px / 32px</b> 用加粗单字母 <b>%s</b>（墨迹高 %.0f%% 版面，笔画经描边加厚，'
+            '有效笔画可达 2 物理像素以上）——四字母字标在 16px 下'
             '墨迹仅约 3 物理像素、单笔画不足 1px，任何字体都会糊成一条白线，故小尺寸换形。'
             '<b>48px 起</b>用完整字标「%s」（字宽占版面 %d%%），左右以角括号「」夹住；'
             '角括号为矢量路径绘制，线宽固定 %d/512，与字母笔画等重'
@@ -365,7 +362,7 @@ def main():
             '<h2>实际尺寸</h2><div class="row">%s</div>'
             '<h2>放大对照</h2><div class="row">%s</div>'
             '</body></html>'
-            % (BG_TOP, BG_BOTTOM, SMALL_BRACE_H * 100, BIG_TEXT,
+            % (BG_TOP, BG_BOTTOM, SMALL_TEXT, SMALL_H * 100, BIG_TEXT,
                int(BIG_FILL * 100), BR_W, real, zoomed))
     (docs / "preview.html").write_text(page, encoding="utf-8")
     print("预览页：%s" % (docs / "preview.html").relative_to(ROOT))
@@ -377,7 +374,7 @@ def main():
            for s in SIZES}
     ap_html = applied_page(
         [("改前（1.1.7 线上）", "16px 四字母「JSON」", old),
-         ("改后（方案 E）", "16px 花括号 { } 分置两侧", new)],
+         ("改后（方案 D）", "16px 加粗单字母 J", new)],
         [("改前 favicon", "128px 的「JSON」版", "prev/icon128.png"),
          ("改后 favicon", "128px 的小尺寸字形版", "../../site/favicon.png")])
     (docs / "applied.html").write_text(ap_html, encoding="utf-8")
