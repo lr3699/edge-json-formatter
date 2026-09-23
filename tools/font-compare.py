@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""临时：同版式换字体渲染图标做对比（黑底 + 角括号 + JSON）。用完即删。"""
+"""字体候选对比：同一套图标版式（黑底 + 角括号 + JSON）逐个换字体渲染成图。
+
+用于改字体时做决策——字号按各字体实测字宽反算，保证「同宽可比」，
+墨迹高度直接反映该字体在同宽下的饱满程度。输出 docs/icon-redesign/font-compare.png。
+
+用法：python tools/font-compare.py --port 9341
+"""
 import base64
 import json
 import sys
@@ -65,9 +71,15 @@ def ev(c, js):
 
 
 def main():
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 9341
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--port", type=int, default=9341)
+    port = ap.parse_args().port
     c = CDPClient(host="127.0.0.1", port=port, timeout=300.0)
     c.ensure_page()
+    # 锁定设备缩放为 1，避免本机 125% 显示缩放把画布放大 1.25 倍
+    c.send("Emulation.setDeviceMetricsOverride",
+           {"width": 900, "height": 1400, "deviceScaleFactor": 1, "mobile": False})
     c.send("Page.bringToFront")
 
     cells = []
@@ -97,7 +109,8 @@ def main():
                     % (code.replace("<svg ", '<svg width="280" height="280" ', 1),
                        label, fs, ink, 100 * ink / VB))
     html.append("</div></body></html>")
-    p = ROOT / "dist" / "_font-compare.html"
+    p = ROOT / "docs" / "icon-redesign" / "font-compare.html"
+    p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text("".join(html), encoding="utf-8")
     c.navigate(p.as_uri(), timeout=30.0)
     c.wait_for("document.readyState==='complete'", timeout=15)
@@ -105,7 +118,7 @@ def main():
     res = c.send("Page.captureScreenshot", {
         "format": "png", "captureBeyondViewport": True,
         "clip": {"x": 0, "y": 0, "width": 700, "height": 1300, "scale": 1}})
-    out = ROOT / "dist" / "_font-compare.png"
+    out = ROOT / "docs" / "icon-redesign" / "font-compare.png"
     out.write_bytes(base64.b64decode(res["data"]))
     print("已保存", out)
     return 0

@@ -91,6 +91,8 @@ code {
 .brand:hover { text-decoration: none; }
 
 .brand svg { width: 24px; height: 24px; color: var(--primary); flex: 0 0 auto; }
+/* 站点头部品牌标记直接用产品图标（与扩展同源），保证品牌一致 */
+.brand-icon { width: 24px; height: 24px; border-radius: 6px; flex: 0 0 auto; }
 
 .top nav { display: flex; gap: 20px; font-size: 14px; }
 .top nav a { color: var(--muted); font-weight: 500; }

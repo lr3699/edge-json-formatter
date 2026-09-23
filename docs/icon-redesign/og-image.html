@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>JSON Duo · 社交分享卡（1200×630）</title>
+<style>
+  /* 出图尺寸固定 1200×630；用 tools/make-og-image.py 截图 */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(900px 420px at 12% -10%, #1d2330 0%, rgba(29,35,48,0) 62%),
+      radial-gradient(760px 420px at 92% 108%, #14202b 0%, rgba(20,32,43,0) 60%),
+      #0b0d12;
+    color: #e8eaf0;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    display: flex;
+    align-items: center;
+    gap: 54px;
+    padding: 0 64px;
+    position: relative;
+  }
+  /* 极淡网格，避免纯色发死 */
+  body::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.028) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.028) 1px, transparent 1px);
+    background-size: 44px 44px, 44px 44px;
+    pointer-events: none;
+  }
+  .left { width: 520px; }
+  .brand { display: flex; align-items: center; gap: 20px; }
+  .brand img {
+    width: 128px; height: 128px; border-radius: 28px; display: block;
+    /* 图标本身是黑底，落在深色卡上会糊在一起：加一圈极淡描边 + 外投影拉开层次 */
+    box-shadow: 0 0 0 1px rgba(255,255,255,.16), 0 18px 40px rgba(0,0,0,.55);
+  }
+  .brand h1 {
+    font-family: Bahnschrift, "Segoe UI Black", "Arial Black", sans-serif;
+    font-weight: 700;
+    font-size: 62px;
+    letter-spacing: .5px;
+  }
+  .lede { margin-top: 26px; font-size: 21px; line-height: 1.62; color: #aab2c2; }
+  .chips { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 12px; }
+  .chip {
+    font-size: 15px;
+    color: #cfd6e4;
+    background: rgba(255,255,255,.055);
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 999px;
+    padding: 8px 16px;
+  }
+  .code {
+    flex: 1;
+    background: rgba(12,15,21,.72);
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 16px;
+    padding: 26px 30px;
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: 19px;
+    line-height: 1.72;
+    white-space: pre;
+    box-shadow: 0 26px 60px rgba(0,0,0,.45);
+  }
+  .k { color: #9cd1ff; }
+  .s { color: #ffd479; }
+  .n { color: #b6f0c4; }
+  .p { color: #7f8aa3; }
+</style>
+</head>
+<body>
+  <div class="left">
+    <div class="brand">
+      <img src="../../icons/icon128.png" alt="JSON Duo">
+      <h1>JSON Duo</h1>
+    </div>
+    <p class="lede">双栏 JSON 工作台 —— 粘贴即格式化，网页里的 JSON 一键变成可折叠、可检索、可复制路径的语法高亮树。</p>
+    <div class="chips">
+      <span class="chip">粘贴即时格式化</span>
+      <span class="chip">网页 JSON 一键美化</span>
+      <span class="chip">JSONPath 复制</span>
+      <span class="chip">大文档虚拟化渲染</span>
+      <span class="chip">纯本地运行</span>
+    </div>
+  </div>
+
+  <div class="code"><span class="p">{</span>
+  <span class="k">"name"</span><span class="p">:</span> <span class="s">"JSON Duo"</span><span class="p">,</span>
+  <span class="k">"version"</span><span class="p">:</span> <span class="s">"1.1.7"</span><span class="p">,</span>
+  <span class="k">"features"</span><span class="p">: [</span>
+    <span class="s">"粘贴即格式化"</span><span class="p">,</span>
+    <span class="s">"折叠树 + 全文搜索"</span><span class="p">,</span>
+    <span class="s">"大 JSON 秒开"</span><span class="p">,</span>
+    <span class="s">"JSONPath 复制"</span>
+  <span class="p">],</span>
+  <span class="k">"theme"</span><span class="p">: [</span><span class="s">"light"</span><span class="p">,</span> <span class="s">"dark"</span><span class="p">],</span>
+  <span class="k">"offline"</span><span class="p">:</span> <span class="n">true</span><span class="p">,</span>
+  <span class="k">"trackers"</span><span class="p">:</span> <span class="n">false</span>
+<span class="p">}</span></div>
+</body>
+</html>

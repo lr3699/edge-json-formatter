@@ -141,6 +141,11 @@ def main():
         print("CDP 端口 %d 无响应" % args.port, file=sys.stderr)
         return 1
     c.ensure_page()
+    # 关键：本机显示缩放 125% 会让截图放大 1.25 倍（128 的图标截出 160px）。
+    # 锁定 deviceScaleFactor=1，CSS 像素 == 设备像素，产出尺寸才与声明一致
+    # —— 商店图标必须是精确的 300×300，否则会被拒。
+    c.send("Emulation.setDeviceMetricsOverride",
+           {"width": 1400, "height": 800, "deviceScaleFactor": 1, "mobile": False})
     c.send("Page.bringToFront")
 
     fs, baseline = measure(c)
