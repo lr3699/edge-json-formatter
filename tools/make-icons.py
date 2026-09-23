@@ -28,7 +28,11 @@ RADIUS = 112                  # 圆角半径（≈22%，与旧版观感一致）
 BG_TOP = "#1C1C1F"            # 黑底：极轻微的上浅下深，给纯黑一点体量感
 BG_BOTTOM = "#050506"
 FG = "#FFFFFF"
-FONT = "'Segoe UI Black','Arial Black','Segoe UI',sans-serif"
+# 字体：Bahnschrift Bold —— 几何无衬线（DIN 系），字形干净、笔画粗细与细角括号协调，
+# 同宽下字高比 Segoe UI Black 更饱满（19% vs 17%）。回退链覆盖非 Windows 环境。
+# 注：字体只在生成阶段使用，成品 PNG 不含字体依赖。
+FONT = "Bahnschrift,'Segoe UI Black','Arial Black',sans-serif"
+FONT_WEIGHT = 700
 TEXT = "JSON"                 # 字标正文
 FILL_RATIO = 0.62             # JSON 字宽占版面比例（两侧必须给角括号让出净空）
 PROBE_FS = 100                # 测量用字号
@@ -39,8 +43,7 @@ PROBE_FS = 100                # 测量用字号
 # 字形按真实字体校正（Microsoft YaHei / SimSun 对照）：
 #   「 = 左竖笔 + 顶部横笔向右（开口朝右下）
 #   」 = 右竖笔 + 底部横笔向左（开口朝左上）—— 角在下，不是简单水平镜像
-BR_W = 20                     # 线宽：与 Segoe UI Black 的字母笔画同宽（≈0.17em），
-                              # 比字标重会让整枚图标发闷；16px 下约 0.6px
+BR_W = 16                     # 线宽：与 Bahnschrift Bold 的字母笔画等重（≈0.12em）
 BR_X = 48                     # 竖笔中心 x（离版面边缘约 5%）
 BR_ARM = 52                   # 横笔长度（向内伸出）
 BR_Y0, BR_Y1 = 196, 318       # 竖笔上下端（中心与字帽带中心对齐）
@@ -69,13 +72,13 @@ def svg(font_size, baseline):
         '</linearGradient></defs>'
         '<rect width="%(vb)d" height="%(vb)d" rx="%(r)d" fill="url(#bg)"/>'
         '<text x="%(cx).1f" y="%(by).1f" text-anchor="middle" '
-        'style="font-family:%(font)s;font-weight:900;font-size:%(fs).2fpx;fill:%(fg)s">'
+        'style="font-family:%(font)s;font-weight:%(fwt)d;font-size:%(fs).2fpx;fill:%(fg)s">'
         '%(text)s</text>'
         '<g fill="none" stroke="%(fg)s" stroke-width="%(bw)d" stroke-linecap="round" '
         'stroke-linejoin="round"><path d="%(bl)s"/><path d="%(br)s"/></g>'
         '</svg>'
         % {"vb": VB, "r": RADIUS, "top": BG_TOP, "bot": BG_BOTTOM,
-           "cx": VB / 2, "by": baseline, "font": FONT,
+           "cx": VB / 2, "by": baseline, "font": FONT, "fwt": FONT_WEIGHT,
            "fs": font_size, "fg": FG, "text": TEXT,
            "bw": BR_W, "bl": _corner(False), "br": _corner(True)})
 
@@ -111,10 +114,10 @@ def measure(c):
     c.navigate(tmp.as_uri(), timeout=30.0)
     c.wait_for("document.readyState==='complete'", timeout=15)
     js = ("(function(){var cv=document.createElement('canvas');var x=cv.getContext('2d');"
-          "x.font='900 %dpx '+%s;var m=x.measureText('%s');"
+          "x.font='%d %dpx '+%s;var m=x.measureText('%s');"
           "return JSON.stringify({w:m.width,a:m.actualBoundingBoxAscent,"
           "d:m.actualBoundingBoxDescent});})()"
-          % (PROBE_FS, json.dumps(FONT), TEXT))
+          % (FONT_WEIGHT, PROBE_FS, json.dumps(FONT), TEXT))
     mt = json.loads(ev(c, js))
     tmp.unlink()
     fs = (VB * FILL_RATIO) / (mt["w"] / PROBE_FS)
@@ -194,9 +197,10 @@ def main():
             '</style></head><body>'
             '<h1>JSON Duo 图标 —— 「JSON」黑底白字</h1>'
             '<p class="sub">黑色圆角底（%s → %s 的极浅渐变，纯黑不至于发死），'
-            '白色 Segoe UI Black（回退 Arial Black / Segoe UI）字标，'
+            '白色 Bahnschrift Bold 字标（回退 Segoe UI Black / Arial Black），'
             '左右以角括号「」（U+300C / U+300D）夹住。角括号为矢量路径绘制，'
-            '线宽固定 %d/512（16px 下约 1px 实线），避免 CJK 全角字形压小字号。'
+            '线宽固定 %d/512，与字母笔画等重（CJK 全角字形会压小字号，故不直接用字形）；'
+            '右括号横笔在底部（角朝右下），按 Microsoft YaHei / SimSun 真实字形校正。'
             'JSON 字宽占版面 %d%%，字号由实测字宽反算，不做横向压缩。</p>'
             '<h2>实际尺寸</h2><div class="row">%s</div>'
             '<h2>放大对照</h2><div class="row">%s</div>'
