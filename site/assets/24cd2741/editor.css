@@ -51,6 +51,12 @@
 
   --radius: 14px;
   --split: 36%;
+
+  /* 品牌标（黑底白 J 图标）的轮廓边。浅色下黑色底板与浅背景是 14:1，
+     底板本身就看得很清楚，不需要边；深色下底板与页面几乎同色、
+     方块会「消失」成悬空的白色 J，靠这道 1px 亮边把图标轮廓立住。
+     数值取自实测：20% 白边在 #0e1015 上约 2:1，够看清轮廓又不抢眼。 */
+  --mark-ring: transparent;
 }
 
 /* 深色 token 提取为可复用块：既跟随系统，也可由「主题」按钮通过
@@ -81,6 +87,8 @@
     --shadow-lg: 0 24px 56px -22px rgba(0, 0, 0, .75);
 
     --blob-opacity: .34;
+
+    --mark-ring: rgba(255, 255, 255, .20);
   }
 }
 
@@ -109,6 +117,8 @@ html[data-theme="dark"] {
   --shadow-lg: 0 24px 56px -22px rgba(0, 0, 0, .75);
 
   --blob-opacity: .34;
+
+  --mark-ring: rgba(255, 255, 255, .20);
 }
 
 html, body { height: 100%; margin: 0; }
@@ -207,19 +217,18 @@ html.is-mac[data-theme="dark"] body {
   min-width: 0;
 }
 
+/* 品牌标 = 产品图标本体（黑底白 J）。与工具栏图标 / 站点 favicon / 商店图标同一枚，
+   顶部导航不再单独画一枚绿色花括号。
+   ⚠️ 这里不要再加 background / box-shadow：图标 PNG 自带底板，四角是透明的，
+   任何底色或投影都会从圆角处漏出来，形成彩色缺口（旧版绿底渐变即属此类）。 */
 .brand-mark {
-  display: grid;
-  place-items: center;
+  display: block;
   width: 32px;
   height: 32px;
   flex: 0 0 auto;
-  border-radius: 9px;
-  background: linear-gradient(140deg, var(--brand), var(--brand-2));
-  color: #fff;
-  box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--brand) 55%, transparent);
+  border-radius: 22%;           /* 与图标 PNG 自身圆角 112/512 对齐 */
+  box-shadow: 0 0 0 1px var(--mark-ring);   /* 深色下把底板轮廓「描」出来，见 token 注释 */
 }
-
-.brand-mark svg { width: 19px; height: 19px; }
 
 .brand-text {
   display: flex;
@@ -894,8 +903,7 @@ html.is-fullscreen body { height: 100%; }
 
 body.is-bigdoc .topbar { padding: 5px 14px; gap: 10px; }
 body.is-bigdoc .topbar .keys { display: none; }
-body.is-bigdoc .brand-mark { width: 26px; height: 26px; border-radius: 7px; }
-body.is-bigdoc .brand-mark svg { width: 16px; height: 16px; }
+body.is-bigdoc .brand-mark { width: 26px; height: 26px; border-radius: 22%; }
 body.is-bigdoc .brand-text em { display: none; }
 
 body.is-bigdoc .workspace { padding: 8px 10px 10px; }
