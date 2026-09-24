@@ -8,6 +8,8 @@
     约 3 个物理像素、单笔画不足 1px，任何字体都只能糊成一条白线；角括号 16/512 的
     线宽在 16px 下仅 0.5px，被抗锯齿磨没。根因是信息密度，调字号无解。
     → **16/32 改用加粗单字母「J」做主形；48px 起才用完整字标「JSON」+ 角括号。**
+      （商店 300px logo 例外：商店只按 72~100px 展示，故也用「J」——
+       见下方 STORE_LOGO_FORCE_SMALL。）
 
 方案：SVG 矢量母版（512 viewBox）→ 本地 Edge 渲染 → CDP Page.captureScreenshot
 按 clip 逐尺寸截图，直接产出 icons/ 下的成品 PNG，无第三方依赖。
@@ -74,6 +76,14 @@ SITE_FAVICON_SIZE = 128       # 站点 favicon 的出图边长（浏览器再按
 # 24px（站点头部），所以取 16px 档的描边量，缩放后与工具栏里的 icon16 等重。
 # 若沿用按出图尺寸取值的规则，128px 会落到 0，标签页上会明显偏细。
 SITE_FAVICON_STROKE = SMALL_STROKE[16]
+
+# 商店 logo（store-icon-300.png）强制走小尺寸主形（单字母 J）：
+# 2026-09-24 实测 Edge 加载项商店的 logo 渲染尺寸——详情页 100px、分类页 96px、
+# 搜索页 72px。**任何位置都不按 300px 展示**，实际落在 72~100px。
+# 该区间内四字母字标的墨迹高度只有约 10px，辨识度显著低于单个加粗 J；
+# 且商店各处 logo 旁边就是产品名「JSON Duo」，logo 本身无需再拼写产品名。
+# 该文件不随扩展打包（build.js 的 EXCLUDE 已排除），改它不影响已上传的 zip。
+STORE_LOGO_FORCE_SMALL = True
 GAP = 24                      # 排版间距，避免截图 clip 相互沾边
 
 
@@ -289,7 +299,9 @@ def main():
             shutil.copy2(out_dir / name, prev / name)
 
     M = measure(c)
-    codes = {size: svg(marks_for(size, M)) for size in SIZES}
+    codes = {size: svg(marks_for(size, M,
+                                 force_small=STORE_LOGO_FORCE_SMALL if size == 300 else None))
+             for size in SIZES}
     # 站点 favicon：**强制小尺寸字形**。标签页把 favicon 缩到 16px 显示，
     # 若直接拿大尺寸版（「JSON」）去缩，结果与改前一样糊。
     fav_code = svg(marks_for(SITE_FAVICON_SIZE, M, force_small=True,
@@ -355,7 +367,10 @@ def main():
             '<b>16px / 32px</b> 用加粗单字母 <b>%s</b>（墨迹高 %.0f%% 版面，笔画经描边加厚，'
             '有效笔画可达 2 物理像素以上）——四字母字标在 16px 下'
             '墨迹仅约 3 物理像素、单笔画不足 1px，任何字体都会糊成一条白线，故小尺寸换形。'
-            '<b>48px 起</b>用完整字标「%s」（字宽占版面 %d%%），左右以角括号「」夹住；'
+            '<b>48px / 128px</b>用完整字标「%s」（字宽占版面 %d%%），左右以角括号「」夹住；'
+            '<b>300px 商店 logo 例外</b>——实测 Edge 商店只在 72~100px 展示 logo'
+            '（详情页 100 / 分类页 96 / 搜索页 72），该区间四字母墨迹仅约 10px，'
+            '故仍取单字母 J。'
             '角括号为矢量路径绘制，线宽固定 %d/512，与字母笔画等重'
             '（CJK 全角字形会压小字号，故不直接用字形）；'
             '右括号横笔在底部（角朝右下），按 Microsoft YaHei / SimSun 真实字形校正。</p>'
