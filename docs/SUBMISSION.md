@@ -3,6 +3,51 @@
 > 依据 Microsoft 官方文档《Publish a Microsoft Edge extension》整理（2026-09 核对）。
 > 参考：https://learn.microsoft.com/microsoft-edge/extensions/publish/publish-extension
 
+## v1.1.9 更新：右栏可编辑 + 空白页修复（**已提交，2026-10-09 16:5x，In review**）
+
+这次**先 bump 版本再传包**（上一版 1.1.8 已 Live，草稿继承的就是 1.1.8 的包，
+同版本重传无法从版本号判断是否生效，所以直接发 1.1.9）。
+
+| 项 | 值 |
+| --- | --- |
+| 新提交 ID | `1152921505702082471`（`InReview`） |
+| 版本 | **1.1.9** |
+| 上一版（仍在售） | 1.1.8，提交 ID `1152921505701964984`，状态 `InExtensionStore` |
+| 上传包 | `dist/json-duo-1.1.9.zip`（243.0 KB，28 个文件；`verify-package.js` 0 项提醒） |
+| 认证说明 | 复用 `tools/fill-certification-1.1.4.json`（1847 字符，未自创文案） |
+| tester 凭据 | **No**（`#testerInfoNo`，默认是 Yes，必须改） |
+| Store ID / CRX ID | `0RDCK9ZTJXV2` ／ `lckjaaoekeleokmdnjjfagoohghjflcn` |
+| 本版内容 | 右栏可编辑（编辑模式 CodeMirror + 树视图双击就地编辑）；修复「完成编辑后右栏空白」；语法配色与字重对齐 |
+
+### 本次流程（更新版，可复用）
+
+1. `packages/dashboard` 读 Extension status：**1.1.8 → Live**，`storeUrlReady: true`，
+   无 `In review` 占通道 ⇒ 可以直接发新版。（探针：`extension-status.js`）
+2. 概览页点 `Update` → 跳到 `/packages`，草稿生成。
+   此时 `submissionvalidity` 是 **`ModuleNotUpdated`**、`canPublish: false`
+   ——「还没换包」的正常中间态，不是出错。
+3. `python tools/cdp_upload.py --index 0 dist/json-duo-1.1.9.zip` 上传。
+4. 左侧 6 步沿用继承材料：Packages → Availability → Properties → Privacy →
+   Store listings，逐页点 `Save & Continue`（按钮 id `saveAndContinueButton`）。
+5. listings 页点 `Publish`（id `publish-button`）→ 跳到 `/submission`。
+6. `pc_fill.py tools/fill-certification-1.1.4.json --url-contains submission`
+   填 `#testerInfoNo` + 认证说明 → 点 `#publishButton`。
+7. **验收看接口**：`overview/submissions` 出现新 ID `1152921505702082471` + `InReview`，
+   旧版 `1152921505701964984` 仍 `InExtensionStore`。草稿消失。
+
+> **踩坑（本次新增）**：
+> 1. 上传过程中页面会弹 **"Something went wrong. Please check your network settings"**，
+>    并且 `cdp_upload.py` 依旧回 `detected: [] / ok: false` —— **两处都是假阴性**。
+>    以 `submissiondetails/draftsubmission` 的 `extensionVersion` 为准：读回 `1.1.9`
+>    + `PackageValid` 即成功。上传是走 Web Worker（`blob.worker.js`）的，
+>    页面级 fetch/XHR 探针抓不到它的请求，别因为「探针没报错」就以为没问题。
+> 2. 同版本号重传无法自证生效（版本号、文件名都不变，页面表格照旧显示 Complete），
+>    要发真更新就得 **bump manifest 版本**。
+> 3. 提交后 `reviewCancel.isCancelAllowed = true` —— 刚提交、审核未推进，
+>    这是「想换包就趁现在」的窗口期；审核推进后该值会变 false，届时只能等。
+
+---
+
 ## v1.1.5 更新：性能 + 折叠修复（**已提交，2026-09-21 18:4x，In review**）
 
 走了完整 Update 流程，全程走接口判定可用性（没信 UI 的按钮状态）。
