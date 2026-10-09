@@ -22,7 +22,15 @@
   /** 环境里没加载 bundle 时（例如内容脚本接管页面），对外暴露能力位让调用方回退 */
   NS.hasBigView = !!CM;
 
-  var DEF = { indent: 2, wrap: false, dark: false, fontSize: 14, lineNumbers: false };
+  var DEF = {
+    indent: 2, wrap: false, dark: false, fontSize: 14, lineNumbers: false,
+    /* 可编辑模式：默认关闭，保持「查看器只读」这套既有语义不变。
+       打开后本视图就是一份真正的编辑器（带撤销/重做、括号补全、缩进跟随），
+       每次文档变化通过 onChange 回调把全文抛给调用方去回写与校验。 */
+    editable: false,
+    /** onChange(text) —— 仅可编辑模式下、且只有文档真的变了才会触发 */
+    onChange: null,
+  };
 
   /* ==================== 排版两条路 ====================
    *
@@ -249,9 +257,11 @@
     var t = CM.tags;
     return CM.syntaxHighlighting(
       CM.HighlightStyle.define([
-        { tag: t.propertyName, color: 'var(--jf-key)' },
-        { tag: t.string, color: 'var(--jf-str)' },
-        { tag: t.number, color: 'var(--jf-num)' },
+        /* 键/字符串/数字加粗，与树视图 .jf-key/.jf-str/.jf-num 对齐；
+           标点保持常规字重（结构轻、数据重） */
+        { tag: t.propertyName, color: 'var(--jf-key)', fontWeight: 'bold' },
+        { tag: t.string, color: 'var(--jf-str)', fontWeight: 'bold' },
+        { tag: t.number, color: 'var(--jf-num)', fontWeight: 'bold' },
         { tag: t.bool, color: 'var(--jf-bool)' },
         { tag: t.null, color: 'var(--jf-null)' },
         { tag: t.separator, color: 'var(--jf-punct)' },
@@ -276,6 +286,8 @@
     var wrapComp = new CM.Compartment();
     /** 行号槽由「显示行号」设置控制，用 Compartment 动态挂载/摘除 */
     var gutterComp = new CM.Compartment();
+    /** 只读 / 可编辑由 Compartment 控制，切模式时不必重建 EditorView（保住光标与折叠态） */
+    var editComp = new CM.Compartment();
     var state = {
       text: '', rows: 0, chars: 0, indent: o.indent, compact: false,
       error: null, exact: true, elapsed: 0,
@@ -293,6 +305,33 @@
       host.style.setProperty('--jf-big-font', (o.fontSize || DEF.fontSize) + 'px');
     }
 
+    /**
+     * 只读 / 可编辑那一组扩展。
+     *
+     * 只读时刻意同时挂 editable.of(false) 与 readOnly.of(true)：前者挡住鼠标与
+     * 输入法，后者挡住程序化 dispatch —— 少一道都可能被别的扩展（搜索面板、
+     * 折叠）改动文档。
+     *
+     * 可编辑时改用 updateListener 把全文抛出去，**不做深比较也不做校验**：
+     * 校验要 JSON.parse 全文，29MB 文档按一次键就是一秒，必须由调用方防抖后再做。
+     */
+    function editExtensions() {
+      if (!o.editable) {
+        return [
+          CM.EditorView.editable.of(false),
+          CM.EditorState.readOnly.of(true),
+        ];
+      }
+      return [
+        CM.EditorView.editable.of(true),
+        CM.EditorState.readOnly.of(false),
+        CM.EditorView.updateListener.of(function (u) {
+          if (!u.docChanged) return;
+          if (typeof o.onChange === 'function') o.onChange(u.state.doc.toString());
+        }),
+      ];
+    }
+
     function extensions() {
       return [
         /* minimalSetup 而不是 basicSetup：后者无条件带行号槽，而「显示行号」
@@ -303,8 +342,7 @@
         CM.keymap.of(CM.foldKeymap),         // 折叠快捷键
         CM.json(),
         CM.search({ top: true }),
-        CM.EditorView.editable.of(false),
-        CM.EditorState.readOnly.of(true),
+        editComp.of(editExtensions()),
         themeComp.of(buildTheme(o.dark)),
         buildHighlight(),
         wrapComp.of(o.wrap ? CM.EditorView.lineWrapping : []),
@@ -341,6 +379,10 @@
     function format(indent, compact) {
       if (indent != null) state.indent = indent;
       if (compact != null) state.compact = !!compact;
+      /* 可编辑模式下重排必须以「编辑器里当前的文本」为源：state.text 是**外部
+         最后一次塞进来的**原文，用户敲过的内容不在里面 —— 直接拿它重排，等于
+         按一下「美化」就把刚才的编辑全丢了。 */
+      if (o.editable && view) state.text = view.state.doc.toString();
       if (!state.text) return false;
       return apply(state.text);
     }
@@ -352,11 +394,16 @@
       var gutterChanged = patch.lineNumbers != null && patch.lineNumbers !== o.lineNumbers;
       var wrapChanged = patch.wrap != null && patch.wrap !== o.wrap;
       var indentChanged = patch.indent != null && patch.indent !== state.indent;
+      var editChanged = patch.editable != null && !!patch.editable !== !!o.editable;
       Object.assign(o, patch);
       if (themeChanged || fontChanged) applyHostTheme();
       if (!view) return;
       if (gutterChanged) {
         view.dispatch({ effects: gutterComp.reconfigure(o.lineNumbers ? CM.lineNumbers() : []) });
+      }
+      if (editChanged) {
+        view.dispatch({ effects: editComp.reconfigure(editExtensions()) });
+        if (o.editable) view.focus();
       }
       if (themeChanged) view.dispatch({ effects: themeComp.reconfigure(buildTheme(o.dark)) });
       if (wrapChanged) {
@@ -380,6 +427,8 @@
         line: view ? view.state.doc.lines : 0,
         // 工具条要拿当前是「美化」还是「压缩」来定按钮文案，别让调用方自己猜
         compact: !!state.compact,
+        // 同上：顶栏的「编辑 / 完成」要能按真实状态渲染，而不是各存一份布尔
+        editable: !!o.editable,
       };
     }
 

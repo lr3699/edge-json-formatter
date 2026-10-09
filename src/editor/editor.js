@@ -250,9 +250,22 @@
   function viewerOptions() {
     return Object.assign({}, settings, {
       interactive: true,
+      /* 允许树视图就地编辑（双击键名 / 值）。只在这里打开：宿主网页上的浮层是
+         一份只读快照，改了也无处可写，那边保持只读。 */
+      editable: true,
       // 独立页没有「宿主网页」，不需要还原/关闭按钮
       onRestore: null,
       onClose: null,
+      /* 树视图就地编辑（双击键名 / 值）提交后的回写口。
+         注意这里必须**同时**做两件事：把新文本落回左栏（唯一真源），
+         以及让树自己按新文本重解析一次 —— 树 → 文本 → 树，只有这一条路径，
+         不允许出现「树改了、文本没改」的第二份状态。 */
+      onEdit: function (text, meta) {
+        syncFromRight(text, 'tree', meta && meta.path);
+        if (viewer) viewer.setText(text, { keepScroll: true });
+      },
+      // 树视图工具条上的「编辑」按钮：切到右侧可编辑文本模式
+      onEditRequest: function () { setEditMode(true); },
       onThemeChange: function (resolved, raw) {
         // 让主题作用到整个页面（顶栏 / 输入面板 / 背景），而不是只有右侧查看器。
         // resolved 是「auto」折算后的实际主题（light|dark），raw 是用户选的档位。
@@ -281,9 +294,11 @@
       return;
     }
     welcomeEl.hidden = true;
-    // 具体显示哪个宿主由 doFormat / doFormatBig 决定，这里只保证「有东西可见」
-    if (!bigHost.hidden) return;
-    viewerHost.hidden = false;
+    /* 右栏同一时刻只能有一个宿主：大文档宿主还开着（CodeMirror）就留给它，
+       否则把树视图揭出来。两个宿主是互斥的，写成赋值而不是
+       「bigHost 可见就直接 return」—— 后者一旦碰上「大宿主还开着、但这一轮该走
+       树视图」的顺序，viewerHost 就永远揭不开，右栏一片空白（真实踩过）。 */
+    viewerHost.hidden = !bigHost.hidden;
   }
 
   /* ---------------- 树视图状态带 → 面板状态带（镜像） ----------------
@@ -404,7 +419,10 @@
         wrap: !!settings.wrap,
         fontSize: numberOr(settings.fontSize, 14),
         lineNumbers: !!settings.lineNumbers,
-        dark: resolvedTheme() === 'dark'
+        dark: resolvedTheme() === 'dark',
+        // 编辑模式：CodeMirror 直接当编辑器用，每次改动把全文抛回来
+        editable: editMode,
+        onChange: function (text) { syncFromRight(text, 'text'); }
       });
     }
     return bigView;
@@ -417,6 +435,150 @@
     if (bigToolbarEl) bigToolbarEl.hidden = true;
     // 离开大文档视图：顶栏与底部状态带恢复正常，输入栏也交回给用户
     setBigDocMode(false);
+  }
+
+  /* ---------------- 查看 / 编辑模式 ----------------
+   *
+   * 「可编辑」在这个工具里是两层，缺一层都不完整：
+   *
+   *   1) 树视图就地编辑（viewer.js）：双击键名 / 值直接改。
+   *      快，但一次只能动一个字段 —— 对应「看着这一行，改这一个值」。
+   *   2) 编辑模式（本文件 + bigview.js）：整块右栏换成可编辑的格式化文本。
+   *      增删节点、重排、整段替换都行，带撤销重做 —— 对应「我要改结构」。
+   *
+   * 两者共用同一条回写通道 syncFromRight()：右侧永远只产出**全文**，
+   * 落回左栏之后左栏仍是唯一真源。右栏从不持有第二份「未同步的数据」。
+   */
+  var editMode = false;
+  /** 回写左栏的防抖句柄 */
+  var rightTimer = null;
+  var btnEdit = $('btnEdit');
+  var editLabelEl = $('editLabel');
+
+  /** 右侧内容的防抖时长：大文本要把左侧虚拟原文视图整篇重建，得等久一点 */
+  function rightWriteDelay(len) {
+    return len > BIG_INPUT_THRESHOLD ? 700 : 180;
+  }
+
+  function syncEditButton() {
+    if (!btnEdit) return;
+    btnEdit.setAttribute('aria-pressed', editMode ? 'true' : 'false');
+    btnEdit.classList.toggle('is-on', editMode);
+    if (editLabelEl) editLabelEl.textContent = editMode ? '完成编辑' : '编辑';
+    btnEdit.title = editMode
+      ? '退出编辑模式，回到只读查看（内容已同步到左侧）'
+      : '在右侧直接编辑格式化后的 JSON；也可以直接双击树里的键名或值就地改';
+    btnEdit.disabled = !sourceText;
+  }
+
+  /**
+   * 右栏产出了新的全文 → 回写到左栏。这是两个可编辑入口唯一的出口。
+   *
+   * 刻意不派发 input 事件（直接写 textarea.value 不会触发 input），
+   * 所以天然没有「右改左、左改右」的回环。
+   *
+   * @param {string} text 右栏的当前全文
+   * @param {string} origin 'tree' | 'text' | 'format'
+   * @param {string} [detail] 路径之类的上下文，用于提示文案
+   */
+  function syncFromRight(text, origin, detail) {
+    if (typeof text !== 'string' || text === sourceText) return;
+    sourceText = text;
+    lastRendered = text;
+    updateStats();
+    syncEditButton();
+
+    if (rightTimer) clearTimeout(rightTimer);
+    var len = sourceText.length;
+    rightTimer = setTimeout(function () {
+      rightTimer = null;
+      var t = sourceText;
+      if (t.length > BIG_INPUT_THRESHOLD) {
+        /* 超大文本：左栏是「虚拟原文视图」，重建一次行索引是 O(n)。
+           每敲一个键都重建会把主线程吃光，所以这里只更新内存源与状态，
+           退出编辑模式 / 按 Ctrl+Enter 时再做一次全量同步。 */
+        inputEl.hidden = true;
+        rawViewEl.hidden = false;
+        updateStats();
+      } else {
+        setInputText(t);
+      }
+      reportEditValidity(t, detail);
+    }, rightWriteDelay(len));
+
+    if (len <= BIG_INPUT_THRESHOLD) {
+      setPill('is-busy', editMode ? '编辑中' : '同步中');
+      setMessage(detail ? '已修改 ' + detail + ' · 左侧同步中…' : '右侧改动正在同步到左侧…');
+    }
+  }
+
+  /**
+   * 右侧内容的合法性反馈。
+   * 关键：**绝不重渲染右栏** —— 用户还在里面打字，重建 EditorView 会把光标、
+   * 折叠态、滚动位置一起丢掉，那就是「打一个字母跳一次」的经典毛病。
+   */
+  function reportEditValidity(text, detail) {
+    var prefix = detail ? '已修改 ' + detail + ' · ' : '';
+    var bigNote = text.length > BIG_INPUT_THRESHOLD
+      ? '（超长文本左侧未实时回填，退出编辑后同步）' : '左侧已同步';
+    try {
+      JSON.parse(text);
+      setPill('is-ok', editMode ? '编辑中' : '已同步');
+      setMessage(prefix + bigNote, 'ok');
+    } catch (err) {
+      var at = parseErrorPos(text, err);
+      setPill('is-err', '格式有误');
+      setMessage(prefix + 'JSON 语法错误：第 ' + at.line + ' 行，第 ' + at.column + ' 列', 'err');
+    }
+  }
+
+  /** 从 JSON.parse 的报错里还原行列（新引擎直接给 line/column，旧引擎只给 position） */
+  function parseErrorPos(text, err) {
+    var msg = String((err && err.message) || '');
+    var m = /line (\d+) column (\d+)/i.exec(msg);
+    if (m) return { line: parseInt(m[1], 10), column: parseInt(m[2], 10) };
+    var p = /position (\d+)/i.exec(msg);
+    if (!p) return { line: 1, column: 1 };
+    var pos = Math.min(parseInt(p[1], 10), text.length);
+    var line = 1;
+    var last = 0;
+    for (var i = 0; i < pos; i++) {
+      if (text.charCodeAt(i) === 10) { line++; last = i + 1; }
+    }
+    return { line: line, column: pos - last + 1 };
+  }
+
+  /**
+   * 切换查看 / 编辑。
+   * 进编辑一律走 CodeMirror —— 只有它是「既能改结构、又扛得住大文档」的视图
+   * （虚拟化 + 撤销重做 + 折叠，且本工具已经为它付过打包与调试成本）。
+   */
+  function setEditMode(on) {
+    on = !!on;
+    if (on === editMode) return;
+    if (on && !sourceText.trim()) {
+      setMessage('先粘一段 JSON 再进入编辑', 'err');
+      return;
+    }
+    if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
+    editMode = on;
+    document.body.classList.toggle('is-editing', on);
+    syncEditButton();
+
+    if (on) {
+      var bv = ensureBigView();
+      doFormatBig(sourceText);
+      bv.setOptions({ editable: true });
+      syncBigToolbar();
+      bv.focus();
+      return;
+    }
+
+    // 退出：先把「超长文本只更新内存源」那份差额补回左栏，再回到只读视图
+    if (bigView) bigView.setOptions({ editable: false });
+    setInputText(sourceText);
+    format(false, false);
+    syncEditButton();
   }
 
   /* ---------------- 大文档视图的工具条 ----------------
@@ -502,6 +664,9 @@
       bigView.format(null, !bigView.getState().compact);
       refreshBigStatus();
       syncBigToolbar();
+      /* 重排后右栏的文本变了，同样要落回左栏 —— 否则一按「压缩」，
+         右栏是单行、左栏还是展开的，两个视图当场分叉 */
+      if (editMode) syncFromRight(bigView.getText(), 'format');
     }, 'btn-solid');
     bigToolbarEl.appendChild(bt.mode);
 
@@ -559,6 +724,12 @@
   function refreshBigStatus() {
     if (!bigView) return;
     var st = bigView.getState();
+    if (st.editable) {
+      // 编辑模式：状态带讲「能怎么改」，不讲行数耗时 —— 那些数每敲一个字就变
+      setPill('is-ok', '编辑中');
+      setMessage('可直接修改 · 左侧实时同步 · Ctrl+Z 撤销 / Ctrl+F 搜索', 'ok');
+      return;
+    }
     setPill('is-ok', st.exact ? '格式化成功' : '格式化成功（原文保真）');
     setMessage('大文档模式 · ' + st.rows.toLocaleString('zh-CN') + ' 行 · ' +
                st.elapsed + 'ms · 虚拟化渲染', 'ok');
@@ -703,8 +874,18 @@
       return;
     }
 
+    /* 顺序见下面的 hideBigView()：先收大宿主，再让 showOutput 揭开树视图 */
+    hideBigView();
     // 先让宿主可见，再创建查看器，避免在 display:none 下量尺寸
     showOutput(true);
+
+    /* 编辑模式：右栏必须留在 CodeMirror 里 —— 这时候重新渲染树视图，
+       用户正在敲的那些字会连同光标一起消失。 */
+    if (editMode) {
+      lastRendered = text;
+      doFormatBig(text);
+      return;
+    }
 
     /* 大文档走 CodeMirror 虚拟化视图：树视图是一节点一行 DOM，
        20MB JSON 是 61 万行，分帧建完要几十秒；虚拟化只画可见的几十行。 */
@@ -714,7 +895,6 @@
       return;
     }
 
-    hideBigView();
     var v = ensureViewer();
 
     var changed = text !== lastRendered;
@@ -871,7 +1051,13 @@
     fileInfoEl.textContent = '';
     lastRendered = null;
     updateStats();
+    // 清空即离开编辑模式：不给「空文档还停在编辑器里」这种状态留口子
+    editMode = false;
+    syncEditButton();
     if (viewer) showOutput(false);
+    if (bigHost) bigHost.hidden = true;
+    if (bigToolbarEl) bigToolbarEl.hidden = true;
+    setBigDocMode(false);
     setPill('', '就绪');
     setMessage('');
     inputEl.focus();
@@ -886,6 +1072,16 @@
   } else if (btnOptions) {
     btnOptions.hidden = true;
   }
+
+  /* 顶栏的「编辑 / 完成编辑」。
+     为什么放在顶栏而不是右栏工具条里：右栏此刻可能是树视图（工具条由
+     viewer.js 建）、也可能是 CodeMirror（工具条是 #bigToolbar），
+     放顶栏就只有一份、两种视图下都在、位置也不会跳。 */
+  if (btnEdit) {
+    btnEdit.addEventListener('click', function () { setEditMode(!editMode); });
+  }
+  // 没有内容时「编辑」不可点：进去也是空编辑器
+  syncEditButton();
 
   /* ---------------- 输入转换工具（转换 ▾ 菜单） ----------------
    * 五个功能全部是 O(n) 单遍处理，不做 JSON.parse / stringify 整棵树

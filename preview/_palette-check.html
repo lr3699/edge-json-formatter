@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>配色核对</title>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #ffffff; }
+    #app { position: absolute; inset: 0; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script src="../src/shared/defaults.js"></script>
+  <script src="../src/content/json-parser.js"></script>
+  <script src="../src/content/rowmodel.js"></script>
+  <script src="../src/content/viewer.js"></script>
+  <script>
+    var params = new URLSearchParams(location.search);
+    var THEME = params.get('theme') === 'dark' ? 'dark' : 'light';
+    var SAMPLE = JSON.stringify({
+      "Function": [
+        "JSON美化",
+        "JSON数据类型显示",
+        "JSON数组显示角标",
+        "高亮显示",
+        "错误提示",
+        "\u003e",
+        "&nbsp;",
+        " ",
+        "<h1>JSON在线解析</h1>",
+        { "备注": ["www.json.cn", "json.cn"] }
+      ],
+      "About": { "QQ": 661275469 }
+    }, null, 2);
+    var app = document.getElementById('app');
+    var viewer = globalThis.__EDGE_JSON_FORMATTER__.createViewer(app, {
+      theme: THEME, keepEscape: false, indent: 2, expandDepth: 9,
+      lineNumbers: false, fontSize: 13
+    });
+    viewer.setText(SAMPLE);
+  </script>
+</body>
+</html>

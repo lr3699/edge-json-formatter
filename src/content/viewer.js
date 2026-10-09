@@ -99,12 +99,16 @@
     '  --jf-border-strong:#dcdcdc;',
     '  --jf-text:#333333;',
     '  --jf-muted:#9aa0a6;',
+    /* 语法高亮配色对标参考样式（json.cn 那套）：
+       键 #92278f / 字符串 #3ab54a / 数字 #25aae2，三者均加粗；
+       标点用中灰而非浅灰——浅灰（原 #b7bcc2）在 14px 下几乎看不见结构。
+       实测参考图标点墨迹亮度约 121–125，故取同亮度的冷灰 #767d85。 */
     '  --jf-key:#92278f;',
     '  --jf-str:#3ab54a;',
-    '  --jf-num:#20a8e0;',
+    '  --jf-num:#25aae2;',
     '  --jf-bool:#e85050;',
     '  --jf-null:#a0a4a8;',
-    '  --jf-punct:#b7bcc2;',
+    '  --jf-punct:#767d85;',
     '  --jf-toggle:#e85050;',
     '  --jf-toggle-hover:#c93b3b;',
     '  --jf-guide:#eef0f3;',
@@ -275,12 +279,36 @@
     '.jf-toggle svg{width:14px;height:14px;display:block;pointer-events:none;}',
     '.jf-toggle:hover{color:var(--jf-toggle-hover);}',
 
-    '.jf-key{color:var(--jf-key);font-weight:600;cursor:pointer;border-radius:3px;}',
+    '.jf-key{color:var(--jf-key);font-weight:700;cursor:pointer;border-radius:3px;}',
     '.jf-key:hover{background:var(--jf-key-bg,rgba(146,39,143,.09));}',
     /* 值：点一下复制。长值在行内被裁掉（见 .jf-content），全文看悬停提示 */
     '.jf-val{cursor:pointer;}',
-    '.jf-str{color:var(--jf-str);}',
-    '.jf-num{color:var(--jf-num);}',
+
+    /* ---------------- 就地编辑（双击键名 / 值） ----------------
+       铁律：编辑器绝不能把行撑高。行高是虚拟化的坐标系（第 i 行在哪儿、
+       spacer 多高全靠它算），行一旦变高，它下面的每一行都会错位。
+       所以整块编辑器按 var(--jf-lh) 定高、行盒子尺寸分毫不动，
+       只在编辑期间放开 .jf-content 的 overflow 让下拉框能露出来。 */
+    '.jf-row.is-editing{overflow:visible;z-index:5;background-color:var(--jf-bg-hover);}',
+    '.jf-row.is-editing .jf-content{overflow:visible;}',
+    '.jf-edit{display:inline-flex;align-items:center;gap:5px;height:var(--jf-lh);}',
+    '.jf-edit-key{color:var(--jf-key);font-weight:700;}',
+    '.jf-edit-input{font:inherit;font-weight:400;height:calc(var(--jf-lh) - 8px);',
+    '  line-height:1;padding:0 5px;border:1px solid var(--jf-accent);border-radius:4px;',
+    '  background:var(--jf-bg);color:var(--jf-text);outline:none;min-width:5em;',
+    '  box-shadow:0 0 0 2px var(--jf-accent-soft);}',
+    '.jf-edit-input[disabled]{opacity:.4;}',
+    '.jf-edit-type{font:inherit;font-size:12px;height:calc(var(--jf-lh) - 8px);',
+    '  padding:0 2px;border:1px solid var(--jf-border-strong);border-radius:4px;',
+    '  background:var(--jf-bg-alt);color:var(--jf-text);outline:none;cursor:pointer;}',
+    '.jf-edit.is-bad .jf-edit-input{border-color:var(--jf-err);',
+    '  box-shadow:0 0 0 2px rgba(217,74,74,.22);}',
+    '.jf-edit-hint{color:var(--jf-err);font-size:12px;font-weight:400;white-space:nowrap;}',
+    /* 键/字符串/数字一律 700：等宽字体（Cascadia Mono / Consolas）与中文回退
+       （雅黑）都自带真 Bold 字形，配合 .jf-root 的 font-synthesis-weight:none
+       不会走合成加粗，笔画不会糊。标点保持 400，维持「结构轻、数据重」的层次 */
+    '.jf-str{color:var(--jf-str);font-weight:700;}',
+    '.jf-num{color:var(--jf-num);font-weight:700;}',
     '.jf-bool{color:var(--jf-bool);}',
     '.jf-null{color:var(--jf-null);font-style:italic;}',
     '.jf-punct{color:var(--jf-punct);}',
@@ -350,7 +378,10 @@
     copy: ['M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1z',
       'M5 15V4a1 1 0 0 1 1-1h9'],
     download: ['M12 3.5v12', 'm7.5 11 4.5 4.5 4.5-4.5', 'M4.5 20.5h15'],
-    theme: ['M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z']
+    theme: ['M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z'],
+    /* 铅笔：把结果切到可编辑模式 */
+    edit: ['M4.5 19.5h4L20 8a2.12 2.12 0 0 0-3-3L5.5 16.5v3z',
+      'm14.5 6.5 3 3']
   };
 
   /** 珊瑚红的圆角方框折叠标记：展开为「−」，折叠为「+」 */
@@ -429,6 +460,10 @@
     var lateRows = false;
     /** 输出文本缓存：outputText() 的结果按「模式+缩进+树版本」缓存，避免每次统计都全树序列化 */
     var outCache = { key: null, text: '' };
+    /** 下一次 render() 是否保留滚动位置（就地编辑提交后重解析时用） */
+    var keepScroll = false;
+    /** 当前打开的就地编辑器 {node, kind, wrap, rowEl}；非 null 时冻结窗口重画 */
+    var activeEdit = null;
 
     rootEl.classList.add('jf-root');
     if (opts.overlay) rootEl.classList.add('jf-overlay');
@@ -457,6 +492,7 @@
        不需要（也不能）逐行挂监听 —— 那是虚拟化列表卡顿的常见来源。 */
     body.addEventListener('scroll', scheduleWindow, { passive: true });
     body.addEventListener('click', onBodyClick);
+    body.addEventListener('dblclick', onBodyDblClick);
     if (typeof ResizeObserver === 'function') {
       resObs = new ResizeObserver(function () {
         layout();
@@ -532,6 +568,15 @@
         render();
       }, 'btn-solid');
       toolbar.appendChild(tb.mode);
+
+      /* 切到「可编辑」：整块右栏换成可编辑的格式化文本。宿主网页上的浮层
+         不接这个钩子（onEditRequest 为空），所以那里只会保留双击就地改。 */
+      if (typeof opts.onEditRequest === 'function') {
+        tb.edit = tbtn('编辑', 'edit',
+          '切换到编辑模式（也可以直接双击这里的键名或值就地修改）',
+          function () { opts.onEditRequest(); }, 'btn-solid');
+        toolbar.appendChild(tb.edit);
+      }
 
       toolbar.appendChild(el('div', 'jf-spacer'));
 
@@ -816,6 +861,9 @@
      */
     function updateWindow(force) {
       if (!model || !winEl) return;
+      /* 就地编辑期间不重画：窗口里的行元素是整批换掉的，重画会把正在输入的
+         编辑器一起拆掉。编辑是短暂状态，提交/取消时会自己触发一次重画。 */
+      if (activeEdit) return;
       var vh = body.clientHeight || 0;
       if (vh <= 0) vh = 600;                    // 还没量到尺寸时按一屏给个合理值
       var first = Math.floor(body.scrollTop / ROW_H) - OVERSCAN;
@@ -904,6 +952,273 @@
       if (t.closest('.jf-val')) doCopy(valueText(node), '已复制值');
     }
 
+    /* ================= 就地编辑（双击键名 / 值） =================
+     *
+     * 交互契约：
+     *   · 双击键名 → 改键；双击值 → 改值（字符串 / 数字 / 布尔 / 空值可切换）
+     *   · Enter 或失焦 = 提交，Esc = 取消
+     *   · 提交后把整棵树重新序列化成文本，经 opts.onEdit(text) 抛给调用方
+     *
+     * 为什么本模块不自己重渲染：JSON 的真源是那段**文本**（左栏那份），
+     * 树只是它的一个视图。提交后由调用方重新 parse 一次，走的是
+     * 「树 → 文本 → 树」唯一一条路径；任何「只改树不改文本」的捷径，
+     * 都会让两个视图在若干次编辑之后悄悄分叉。
+     *
+     * 为什么不用 contenteditable：行是定高的虚拟化单元格，contenteditable
+     * 会随输入长高、还会把换行符塞进来（JSON 字符串遇到裸换行就废了）。
+     * 这里用行内 input，尺寸写死成 --jf-lh，行盒子分毫不动。
+     */
+
+    var VALUE_TYPES = [
+      { v: 'string', label: '字符串' },
+      { v: 'number', label: '数字' },
+      { v: 'boolean', label: '布尔' },
+      { v: 'null', label: '空值' }
+    ];
+    /** 严格 JSON 数字字面量：01 / .5 / 1. / +1 / Infinity / NaN 都不接受 */
+    var NUM_LITERAL = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
+
+    function isEditableLeaf(node) {
+      return !!node && (node.type === 'string' || node.type === 'number' ||
+                        node.type === 'boolean' || node.type === 'null');
+    }
+
+    /** 按类型解析输入框里的字面量；非法返回 null */
+    function parseLiteral(type, raw) {
+      var s = String(raw == null ? '' : raw);
+      if (type === 'null') return { value: null, text: 'null' };
+      if (type === 'boolean') {
+        var b = s.trim();
+        if (b !== 'true' && b !== 'false') return null;
+        return { value: b === 'true', text: b };
+      }
+      if (type === 'number') {
+        var n = s.trim();
+        if (!NUM_LITERAL.test(n)) return null;
+        /* 原样采用用户写的字面量：Number() 只是为了拿到树上的 value，
+           序列化时用的是 n —— 手敲的 19 位大整数不会被浮点吃掉精度。 */
+        return { value: Number(n), text: n };
+      }
+      return { value: s, text: JSON.stringify(s) };
+    }
+
+    /** 该节点走的是「原生解析 + 惰性树」那条路吗（raw 是只读 getter，值存在 __n 里） */
+    function isLazyNode(node) { return !!node.__sess; }
+
+    /**
+     * 标量写回。两条路的落点不同：
+     *   · 惰性树 —— 真正被序列化的是原生对象（parent.__n），必须改它；
+     *     节点上的 __raw 只是显示缓存，一并覆盖，屏幕上的值立刻跟上；
+     *   · 手写解析器 —— 序列化读 node.raw，直接改它即可。
+     */
+    function writeScalar(node, type, value, text) {
+      if (isLazyNode(node)) {
+        var p = node.parent;
+        if (p && p.__n) {
+          if (p.type === 'array') p.__n[node.indexInParent] = value;
+          else if (node.keyNode) p.__n[node.keyNode.value] = value;
+        }
+        node.type = type;
+        node.value = value;
+        node.__raw = text;
+        return;
+      }
+      node.type = type;
+      node.value = value;
+      node.raw = text;
+    }
+
+    /**
+     * 改键名。惰性树的原生对象不能就地改名，只能按原顺序重建一份
+     * （V8 对非数字键保序，且快路径已排除数字开头的键，顺序是安全的），
+     * 再作废子节点缓存，让 entries 按新键名重建。
+     */
+    function writeKey(node, key, text) {
+      var kn = node.keyNode;
+      if (!kn) return;
+      var p = node.parent;
+      if (isLazyNode(node)) {
+        if (p && p.__n && p.type === 'object') {
+          var src = p.__n;
+          var keys = Object.keys(src);
+          var next = {};
+          for (var i = 0; i < keys.length; i++) {
+            next[keys[i] === kn.value ? key : keys[i]] = src[keys[i]];
+          }
+          p.__n = next;
+          p.__kid = null;                    // 子节点缓存作废，按新键名重建
+        }
+      }
+      kn.value = key;
+      if (isLazyNode(node)) kn.__raw = text;
+      else kn.raw = text;
+      if (p && p.__jfSorted) p.__jfSorted = null;   // 排序缓存同样失效
+    }
+
+    /** 同层是否已有同名键：序列化出重复键是合法 JSON 但几乎总是笔误，先拦下 */
+    function keyTaken(node, key) {
+      var p = node.parent;
+      if (!p || p.type !== 'object') return false;
+      var es = orderedEntries(p);
+      for (var i = 0; i < es.length; i++) {
+        if (es[i].keyNode === node.keyNode) continue;
+        if (es[i].keyNode.value === key) return true;
+      }
+      return false;
+    }
+
+    function closeEditor(redraw) {
+      activeEdit = null;
+      if (redraw) updateWindow(true);
+    }
+
+    function openEditor(rowEl, i, node, kind) {
+      var content = rowEl.querySelector('.jf-content');
+      if (!content) return;
+      if (activeEdit) closeEditor(false);
+      content.textContent = '';
+
+      var wrap = el('span', 'jf-edit');
+      /* 改值时把键留在旁边：不然一行里只剩个输入框，用户不知道自己在改哪一项 */
+      if (kind === 'value' && node.keyNode) {
+        wrap.appendChild(el('span', 'jf-edit-key', keyText(node.keyNode)));
+        wrap.appendChild(el('span', 'jf-punct', ': '));
+      }
+
+      var typeSel = null;
+      if (kind === 'value') {
+        typeSel = el('select', 'jf-edit-type');
+        for (var t = 0; t < VALUE_TYPES.length; t++) {
+          var op = el('option', null, VALUE_TYPES[t].label);
+          op.value = VALUE_TYPES[t].v;
+          typeSel.appendChild(op);
+        }
+        typeSel.value = node.type;
+        wrap.appendChild(typeSel);
+      }
+
+      var input = el('input', 'jf-edit-input');
+      input.type = 'text';
+      input.spellcheck = false;
+      input.setAttribute('autocomplete', 'off');
+      if (kind === 'key') {
+        input.value = node.keyNode.value;
+      } else if (node.type === 'string') {
+        input.value = node.value;            // 已解码的文本，提交时再 JSON.stringify 回去
+      } else if (node.type === 'null') {
+        input.value = '';
+        input.disabled = true;
+      } else {
+        input.value = node.raw;              // 数字 / 布尔：原样给字面量
+      }
+      wrap.appendChild(input);
+
+      var hint = el('span', 'jf-edit-hint');
+      wrap.appendChild(hint);
+      content.appendChild(wrap);
+
+      function fail(message) {
+        wrap.classList.add('is-bad');
+        hint.textContent = message;
+        input.focus();
+        if (input.select) input.select();
+      }
+
+      function fire() {
+        if (!activeEdit || activeEdit.wrap !== wrap) return;
+        if (kind === 'key') {
+          var nk = input.value.trim();
+          if (!nk) return fail('键名不能为空');
+          if (nk === node.keyNode.value) return closeEditor(true);
+          if (keyTaken(node, nk)) return fail('同层已有同名键');
+          writeKey(node, nk, JSON.stringify(nk));
+        } else {
+          var type = typeSel ? typeSel.value : node.type;
+          var lit = parseLiteral(type, input.value);
+          if (!lit) return fail(type === 'number' ? '不是合法数字' : '只能是 true 或 false');
+          writeScalar(node, type, lit.value, lit.text);
+        }
+        var text = textAfterEdit();
+        var path = model ? model.pathOf(node) : '';
+        closeEditor(false);
+        if (typeof opts.onEdit === 'function') opts.onEdit(text, { path: path, kind: kind });
+        else render();
+        toast('已修改 ' + (path || ''));
+      }
+
+      input.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter') { ev.preventDefault(); fire(); }
+        else if (ev.key === 'Escape') {
+          ev.preventDefault();
+          closeEditor(true);
+          toast('已取消编辑');
+        }
+      });
+      input.addEventListener('input', function () { wrap.classList.remove('is-bad'); hint.textContent = ''; });
+      input.addEventListener('blur', function () {
+        /* 失焦延迟一拍再判：点下拉框会先让 input 失焦，那是换类型不是提交 */
+        setTimeout(function () {
+          if (!activeEdit || activeEdit.wrap !== wrap) return;
+          if (wrap.contains(document.activeElement)) return;
+          fire();
+        }, 0);
+      });
+      if (typeSel) {
+        typeSel.addEventListener('change', function () {
+          var tt = typeSel.value;
+          input.disabled = tt === 'null';
+          if (tt === 'null') input.value = '';
+          else if (tt === 'boolean' && input.value !== 'true' && input.value !== 'false') input.value = 'true';
+          else if (tt === 'number' && !NUM_LITERAL.test(input.value.trim())) input.value = '0';
+          input.focus();
+          if (input.select) input.select();
+        });
+      }
+
+      activeEdit = { node: node, kind: kind, wrap: wrap, rowEl: rowEl };
+      input.focus();
+      if (input.select) input.select();
+    }
+
+    /** 作废序列化缓存并取当前全文 */
+    function textAfterEdit() {
+      treeVersion++;
+      outCache.key = null;
+      return outputText();
+    }
+
+    /**
+     * 双击进入编辑。单击仍是「复制值 / 复制路径」，所以编辑必须换个手势 ——
+     * 双击头一下仍会触发复制（会闪一条 toast），代价可接受：给单击加延迟判断
+     * 会把核心的复制手感拖慢，得不偿失。
+     */
+    function onBodyDblClick(e) {
+      var t = e.target;
+      if (!t || !t.closest || !winEl || !model) return;
+      /* 就地编辑必须显式开启：宿主网页上的浮层是一份**只读快照**，
+         在那里改值根本无处可写（原页面的 JSON 不是我们能回写的），
+         开了只会让用户以为改成功了。所以只有编辑页传 editable: true。 */
+      if (!opts.editable) return;
+      if (t.closest('.jf-edit')) return;
+      var rowEl = t.closest('.jf-row');
+      if (!rowEl || !winEl.contains(rowEl)) return;
+      var i = parseInt(rowEl.getAttribute('data-i'), 10);
+      if (isNaN(i) || model.isClose(i)) return;
+      var node = model.nodeAt(i);
+      if (!node) return;
+
+      if (t.closest('.jf-key')) {
+        if (!node.keyNode) return;            // 根节点没有键名可改
+        e.preventDefault();
+        openEditor(rowEl, i, node, 'key');
+        return;
+      }
+      if (t.closest('.jf-val') && isEditableLeaf(node)) {
+        e.preventDefault();
+        openEditor(rowEl, i, node, 'value');
+      }
+    }
+
     /**
      * 「压缩」视图：直接给紧凑序列化文本。
      *
@@ -966,6 +1281,9 @@
 
     function render() {
       cancelWindow();
+      activeEdit = null;              // 重建会清空 body，编辑器随之消失
+      var prevTop = keepScroll && body ? body.scrollTop : 0;
+      keepScroll = false;
       body.textContent = '';
       // body 上的 jf-compact 只是「当前是压缩视图」的状态标记（CSS 不再依赖它）
       body.classList.toggle('jf-compact', state.outMode === 'compact');
@@ -997,8 +1315,11 @@
       winEl = el('div', 'jf-window');
       sizerEl.appendChild(winEl);
       body.appendChild(sizerEl);
-      body.scrollTop = 0;
       layout();
+      /* 就地编辑提交后调用方会重解析一次（树→文本→树，只有一条路径），
+         那一次重渲染得把滚动位置还回去 —— 否则改第 500 行会被弹回顶部。
+         必须在 layout() 之后赋：spacer 还没铺高时 scrollTop 会被浏览器钳成 0。 */
+      body.scrollTop = prevTop;
       lateRows = false;                      // 首屏这一批行要播入场动效
       updateWindow(true);
       lateRows = true;                       // 之后的滚动补画都不再播
@@ -1210,6 +1531,9 @@
     /* ---------------- 对外接口 ---------------- */
     function setText(text, options) {
       options = options || {};
+      /* 就地编辑提交后调用方会拿新文本再喂回来一次，这一次要保住滚动位置：
+         否则「改第 500 行」会变成「改完被弹回顶部，还要再滚下去」。 */
+      keepScroll = !!options.keepScroll;
       state.text = typeof text === 'string' ? text : String(text == null ? '' : text);
       state.error = null;
       state.root = null;

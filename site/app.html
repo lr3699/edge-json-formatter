@@ -12,9 +12,9 @@
   <meta property="og:description" content="双栏 JSON 工作台：左栏粘贴原文、右栏实时预览，可折叠树、搜索、JSONPath 复制，纯本地运行。">
   <meta property="og:image" content="https://lr3699.github.io/json-formatter-pro/og-image.png">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="icon" href="favicon.png?v=24cd2741" type="image/png">
-  <link rel="stylesheet" href="assets/24cd2741/editor.css">
-  <link rel="stylesheet" href="app.css?v=24cd2741">
+  <link rel="icon" href="favicon.png?v=d5a8743c" type="image/png">
+  <link rel="stylesheet" href="assets/d5a8743c/editor.css">
+  <link rel="stylesheet" href="app.css?v=d5a8743c">
 </head>
 <body>
   <div class="aurora" aria-hidden="true">
@@ -25,7 +25,7 @@
 
   <header class="topbar">
     <div class="brand">
-      <img class="brand-mark" src="favicon.png?v=24cd2741" alt="" width="32" height="32">
+      <img class="brand-mark" src="favicon.png?v=d5a8743c" alt="" width="32" height="32">
       <span class="brand-text">
         <b>JSON Duo</b>
         <em>粘贴即格式化 · 在线免安装</em>
@@ -43,6 +43,15 @@
         <em class="keys-sep">·</em>
         <kbd>F</kbd><i>全屏</i>
       </span>
+      <button id="btnEdit" class="btn btn-ghost" type="button"
+              aria-pressed="false" title="在右侧直接编辑格式化后的 JSON；也可以直接双击树里的键名或值就地改">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4.5 19.5h4L20 8a2.12 2.12 0 0 0-3-3L5.5 16.5v3z"/>
+          <path d="m14.5 6.5 3 3"/>
+        </svg>
+        <span id="editLabel">编辑</span>
+      </button>
       <button id="btnSolo" class="btn btn-ghost panel-solo-toggle" type="button"
               aria-pressed="false" title="收起 / 展开左侧输入栏，把宽度让给 JSON">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
@@ -207,14 +216,14 @@
     </section>
   </aside>
 
-  <script src="assets/24cd2741/codemirror.bundle.js"></script>
-  <script src="assets/24cd2741/defaults.js"></script>
-  <script src="assets/web-storage.js?v=24cd2741"></script>
-  <script src="assets/24cd2741/json-parser.js"></script>
-  <script src="assets/24cd2741/rowmodel.js"></script>
-  <script src="assets/24cd2741/viewer.js"></script>
-  <script src="assets/24cd2741/bigview.js"></script>
-  <script src="assets/24cd2741/editor.js"></script>
-  <script src="assets/web-settings.js?v=24cd2741"></script>
+  <script src="assets/d5a8743c/codemirror.bundle.js"></script>
+  <script src="assets/d5a8743c/defaults.js"></script>
+  <script src="assets/web-storage.js?v=d5a8743c"></script>
+  <script src="assets/d5a8743c/json-parser.js"></script>
+  <script src="assets/d5a8743c/rowmodel.js"></script>
+  <script src="assets/d5a8743c/viewer.js"></script>
+  <script src="assets/d5a8743c/bigview.js"></script>
+  <script src="assets/d5a8743c/editor.js"></script>
+  <script src="assets/web-settings.js?v=d5a8743c"></script>
 </body>
 </html>

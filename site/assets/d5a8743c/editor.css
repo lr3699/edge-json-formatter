@@ -925,6 +925,19 @@ body.is-bigdoc .panel-foot .muted { white-space: nowrap; overflow: hidden; text-
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
+/* 编辑模式是「正在改数据」，用品牌绿而不是通用蓝，和「输入栏收起」这类
+   纯布局开关区分开：一个是改内容，一个是换布局。 */
+#btnEdit[aria-pressed="true"] {
+  color: var(--brand);
+  border-color: color-mix(in srgb, var(--brand) 50%, var(--border));
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+}
+
+/* 编辑模式下给右栏加一道内描边，让「这块现在可以打字」一眼可见 */
+body.is-editing .panel-output {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--brand) 42%, transparent);
+}
+
 /* 全屏时收紧外边距，把空间尽量留给内容 */
 html.is-fullscreen .workspace { padding: 10px 12px 12px; }
 
