@@ -1438,13 +1438,17 @@
    * 把主题作用到整个编辑页（不只是查看器面板）。
    * 在 <html> 上挂 data-theme，配合 editor.css 的 html[data-theme="dark"] 覆盖
    * 全部 token（--page/--panel/--text/--border 等），实现「全局深色」。
+   *
+   * 浅色必须**显式**写成 data-theme="light"，不能像以前那样把属性删掉了事：
+   * 「跟随系统」这层语义由两处的 @media 承担 —— editor.css 的
+   * `:root:not([data-theme="light"])` 与 app.css 的 `html:not([data-theme="light"])`。
+   * 属性一删，在系统是深色时这些选择器照样命中，整页仍按深色铺；而右栏树视图
+   * 拿到的是明确的 light → 「系统深色 + 手动选浅色」就变成整页深、右栏浅，
+   * 又是一次左右割裂（与「加载即系统深色、右栏不跟」正好互为镜像）。
    */
   function applyPageTheme(resolved) {
-    if (resolved === 'dark') {
-      document.documentElement.setAttribute('data-theme', 'dark');
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-    }
+    document.documentElement.setAttribute('data-theme',
+      resolved === 'dark' ? 'dark' : 'light');
   }
 
   function applySettingsToViewer() {

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>JSON Duo · 深色主题一致性修复（改前 / 改后）</title>
+<style>
+  body {
+    background: #111318; color: #E5E7EB; margin: 0; padding: 26px 30px 34px;
+    font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  }
+  h1 { font-size: 17px; font-weight: 650; margin: 0 0 8px; }
+  h2 { font-size: 13px; font-weight: 620; margin: 26px 0 4px; color: #F3F5F8; }
+  p.lede { color: #9CA3AF; font-size: 12px; line-height: 1.85; margin: 0 0 6px; max-width: 1180px; }
+  p.lede b { color: #E5E7EB; }
+  p.lede code { background: #1C1F27; color: #C9D1D9; padding: 1px 6px; border-radius: 5px; font-size: 11.5px; }
+  p.why { color: #8B93A3; font-size: 11.5px; line-height: 1.8; margin: 4px 0 14px; max-width: 1180px; }
+  p.why b { color: #E5E7EB; }
+  .pair { display: flex; gap: 20px; align-items: flex-start; }
+  figure { margin: 0; }
+  figure img { display: block; width: 560px; border-radius: 9px; border: 1px solid #2A2F3A; }
+  figcaption { margin-top: 8px; font-size: 11.5px; color: #8B93A3; }
+  figcaption b { color: #E5E7EB; }
+  .tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px;
+         border-radius: 999px; margin-right: 6px; vertical-align: 1px; }
+  .bad { background: rgba(217, 74, 74, .18); color: #FF9C9C; }
+  .good { background: rgba(63, 192, 106, .18); color: #7FDC9B; }
+</style>
+</head>
+<body>
+  <h1>JSON Duo —— 深色主题一致性修复</h1>
+  <p class="lede">用户看到的是：<b>系统处于深色主题时，左栏与顶栏都是深的，右侧 JSON 树视图却是白底</b>。
+    根因不在配色表，而在两处「把主题写进 DOM」的逻辑，各错一半：</p>
+  <p class="lede"><b>① 加载即深色 —— 右栏不跟。</b>
+    <code>viewer.js</code> 的 <code>applyTheme()</code> 靠一个媒体查询句柄把
+    <code>theme === 'auto'</code> 折算成实际档位，而 <code>createViewer()</code> 最前面就调用了它 ——
+    那一刻该变量（<code>var mql</code>）还只是声明提升出来的 <code>undefined</code>，
+    于是 'auto' <b>恒被折算成浅色</b>，树视图拿到 <code>data-theme="light"</code>。
+    整页看着仍是深的，是因为深色 token 挂在 <code>@media (prefers-color-scheme: dark)</code> 里、
+    选择器写作 <code>:not([data-theme="light"])</code>，<b>没有属性照样命中</b>。
+    系统主题「中途」变化时反而正常（那时句柄已赋值）——「刷新就白、切一下就好」正是这处顺序 bug 的指纹。</p>
+  <p class="lede"><b>② 手动选浅色 —— 整页不跟。</b>
+    <code>editor.js</code> 的 <code>applyPageTheme('light')</code> 走的是 <b>删掉</b> <code>data-theme</code> 属性，
+    而不是显式写 <code>"light"</code>；上面那个 <code>:not([data-theme="light"])</code> 于是照样命中，
+    系统是深色时整页仍按深色铺 —— 变成「整页深、右栏浅」，与 ① 互为镜像。</p>
+
+  <h2>一、系统深色主题（用户报的场景）</h2>
+  <p class="why">固定条件：<code>prefers-color-scheme: dark</code>，主题档位「跟随系统」，同一段 JSON。
+    判据是「<b>整页与右栏同深浅</b>」，不是某一边好不好看。</p>
+  <div class="pair">
+    <figure>
+      <img src="before-system-dark.png" alt="改前：右栏白底">
+      <figcaption><span class="tag bad">改前</span>右栏 <b>白底</b>（<code>data-theme="light"</code>），
+        与左侧深色输入栏割裂</figcaption>
+    </figure>
+    <figure>
+      <img src="after-system-dark.png" alt="改后：左右同深">
+      <figcaption><span class="tag good">改后</span>右栏随系统变深，与整页一致</figcaption>
+    </figure>
+  </div>
+
+  <h2>二、系统深色 + 手动选「浅色」</h2>
+  <p class="why">固定条件：<code>prefers-color-scheme: dark</code>，在右栏工具条上把档位点到「浅色」。
+    「改前」这一格是<b>把旧的 <code>applyPageTheme</code> 行为（浅色时删属性）原样重放</b>出来的，
+    不是手画的示意。</p>
+  <div class="pair">
+    <figure>
+      <img src="before-manual-light.png" alt="改前：整页仍深、右栏浅">
+      <figcaption><span class="tag bad">改前</span>右栏按手动档位变浅了，<b>整页却仍是深的</b></figcaption>
+    </figure>
+    <figure>
+      <img src="after-manual-light.png" alt="改后：两边都浅">
+      <figcaption><span class="tag good">改后</span>整页与右栏一起变浅</figcaption>
+    </figure>
+  </div>
+
+  <h2>回归护栏</h2>
+  <p class="why">新增 <code>tools/verify-theme.py</code>：用 CDP 真机跑 7 个场景（加载即深色 / 加载即浅色 /
+    系统中途切换 / 手动档位压过系统 / 手动档位刷新后仍生效 / 收尾复位），
+    对<b>网页版工作台</b>与<b>扩展独立编辑页</b>各验一遍；
+    每一格都要求 <code>&lt;html data-theme&gt;</code>、<code>.jf-root[data-theme]</code>
+    与两者的<b>计算背景色</b>三层同时成立，共 14 项，当前全绿。</p>
+</body>
+</html>

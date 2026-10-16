@@ -431,6 +431,16 @@
     var opts = Object.assign({}, NS.DEFAULTS, userOptions || {});
     var parser = NS.parser;
 
+    /* 系统是否偏好深色。**必须声明在这里**（早于下面第一次 applyTheme()）：
+       applyTheme 靠它把 opts.theme === 'auto' 折算成 light / dark，而 var 声明会
+       提升但不初始化——它原本文档靠后的「主题与字号」段里，createViewer 最前面就
+       调用的 applyTheme() 读到的还是 undefined，于是 'auto' 恒被折算成 **light**：
+       整页看仍然是深的（editor.css 的深色块挂在 @media 里，:not([data-theme="light"])
+       照样命中），右侧树视图却拿到 data-theme="light" → 白底。
+       这就是「系统深色主题时右侧 JSON 区域不跟着变深」的根因。
+       只有系统主题**中途**变化时才正常（那时 mql 早已赋值）。 */
+    var mql = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
     var state = {
       text: '',
       root: null,
@@ -618,7 +628,7 @@
     }
 
     /* ---------------- 主题与字号 ---------------- */
-    var mql = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+    /* mql 在 createViewer 顶部声明（必须早于第一次 applyTheme()，原因见那里） */
 
     function applyTheme() {
       var theme = opts.theme;
