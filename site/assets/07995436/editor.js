@@ -266,6 +266,8 @@
       },
       // 树视图工具条上的「编辑」按钮：切到右侧可编辑文本模式
       onEditRequest: function () { setEditMode(true); },
+      // 树视图工具条上的「文本」按钮：从树视图切回完整文本（大文档）视图
+      onTextViewRequest: function () { setBigMode(true); },
       onThemeChange: function (resolved, raw) {
         // 让主题作用到整个页面（顶栏 / 输入面板 / 背景），而不是只有右侧查看器。
         // resolved 是「auto」折算后的实际主题（light|dark），raw 是用户选的档位。
@@ -435,6 +437,20 @@
     if (bigToolbarEl) bigToolbarEl.hidden = true;
     // 离开大文档视图：顶栏与底部状态带恢复正常，输入栏也交回给用户
     setBigDocMode(false);
+  }
+
+  /* 树视图 ⇄ 大文档（全文）视图的手动切换。
+     大 JSON 默认走全文视图（毫秒级、可搜索/折叠/编辑）；但用户可能想按层级看结构，
+     于是大工具条上有「树视图」按钮切到树视图（bigMode=false，树上带「层级」下拉），
+     树工具条上有「文本」按钮切回全文（bigMode=true）。切完按当前源立即重排一次。
+     这个选择「粘性」：一直生效到再次手动切换，或在左栏改动内容时重置为自动
+     （见输入 / 粘贴事件里的 bigMode = null）。force=true 让超大内容也照排，
+     不被「内容过大」的自动上限挡住。 */
+  function setBigMode(mode) {
+    bigMode = mode;
+    if (!sourceText.trim()) return;
+    format(true);
+    syncBigToolbar();
   }
 
   /* ---------------- 查看 / 编辑模式 ----------------
@@ -618,6 +634,13 @@
 
   function buildBigToolbar() {
     if (!bigToolbarEl || bigToolbarEl.childNodes.length) return;
+
+    // 「树视图」：大 JSON 默认走这个全文视图（毫秒级）；想看结构 + 「层级」下拉时，
+    // 点它切到树视图。树工具条上有对应的「文本」按钮可切回来。
+    bt.tree = btBtn('树视图', null, '切换到树视图（带「层级」下拉，可按深度展开 / 折叠）', function () {
+      setBigMode(false);
+    }, 'btn-solid');
+    bigToolbarEl.appendChild(bt.tree);
 
     bt.search = btBtn('搜索', null, '在结果里查找（Ctrl+F）', function () {
       if (bigView) { bigView.openSearch(); bigView.focus(); }
@@ -957,6 +980,7 @@
     // 大输入模式下 textarea 已被隐藏，不会有 input 事件；正常路径下
     // 直接读 textarea 的值作为内存源（小文本，实时编辑）。
     sourceText = inputEl.value;
+    bigMode = null;               // 左栏内容是新的：恢复「按体积自动选视图」
     if (e && e.inputType === 'insertFromPaste') inputKind = 'paste';
     scheduleFormat();
   });
@@ -972,6 +996,7 @@
     if (!text || text.length <= BIG_INPUT_THRESHOLD) return; // 小文本走 textarea 默认路径
     e.preventDefault();                 // 阻止浏览器把大文本塞进 textarea
     setInputText(text);
+    bigMode = null;                     // 新粘贴的内容：恢复「按体积自动选视图」
     inputKind = 'paste';
     scheduleFormat(true);               // 大文本粘贴不需要防抖，立即格式化
   });

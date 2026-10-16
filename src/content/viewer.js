@@ -490,6 +490,13 @@
     var keepScroll = false;
     /** 当前展开层级：'all' 或正整数 N（展开到第 N 层）。默认全部展开 */
     var expandLevel = 'all';
+    /** 用户是否手动选过层级。选过则新文档沿用该选择，不再按体积自适应 */
+    var levelPinned = false;
+    /* 「全部展开」的节点数上限：超过它，新文档默认只展开前 BIG_DEFAULT_LEVEL 层，
+       避免一次物化整棵树（几十万行 → 200ms+ 卡顿）。用户仍可在下拉里选「全部展开」，
+       或选更浅的层级。小/中文档不受影响，照旧全部展开。 */
+    var ALL_EXPAND_MAX = 50000;
+    var BIG_DEFAULT_LEVEL = 3;
     /** 当前打开的就地编辑器 {node, kind, wrap, rowEl}；非 null 时冻结窗口重画 */
     var activeEdit = null;
 
@@ -604,6 +611,16 @@
           '切换到编辑模式（也可以直接双击这里的键名或值就地修改）',
           function () { opts.onEditRequest(); }, 'btn-solid');
         toolbar.appendChild(tb.edit);
+      }
+
+      /* 「文本」按钮：切到完整文本视图（大 JSON 的快速全文视图）。只有调用方提供
+         onTextViewRequest（编辑器内建大文档视图）时才出现；弹窗 / 站点浮层没有这个
+         对口，不显示，行为与原先完全一致。 */
+      if (typeof opts.onTextViewRequest === 'function') {
+        tb.text = tbtn('文本', null,
+          '切换到完整文本视图（大 JSON 的快速全文视图）',
+          function () { opts.onTextViewRequest(); }, 'btn-solid');
+        toolbar.appendChild(tb.text);
       }
 
       /* 展开层级下拉：默认全部展开；选 N 可只展开前 N 层，深层收成摘要。
@@ -1389,6 +1406,7 @@
       if (!state.root) return;
       var lvl = level === 'all' ? 'all' : (typeof level === 'number' && level >= 1 ? level : 'all');
       expandLevel = lvl;
+      levelPinned = true;   // 用户显式选择：后续新文档沿用，不再按体积自适应
       parser.setExpandLevel(state.root, lvl);
       if (model) {
         model.rebuild();
@@ -1609,8 +1627,13 @@
       } else {
         state.stats = parser.stats(state.root);
       }
-      /* 应用当前展开层级：默认 'all'（全部展开，与既有行为一致）；若用户此前
-         切过层级，新格式化的文档沿用同一层级，不必每次重选。 */
+      /* 应用当前展开层级。用户手动选过层级（levelPinned）就沿用；否则按文档体积
+         自适应：小/中文档「全部展开」（与既有行为一致），超大文档默认只展开前几层
+         —— 全部展开会把整棵惰性树物化（几十万行 → 200ms+），这里保毫秒级首屏，
+         用户随时能在下拉里选「全部展开」或更浅的层级。 */
+      if (!levelPinned) {
+        expandLevel = (state.stats.count > ALL_EXPAND_MAX) ? BIG_DEFAULT_LEVEL : 'all';
+      }
       parser.setExpandLevel(state.root, expandLevel);
       populateLevelOptions();
       render();
