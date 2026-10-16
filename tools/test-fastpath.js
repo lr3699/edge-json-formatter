@@ -263,6 +263,51 @@ function run() {
     console.log('  [SKIP] 未找到 tools/fixtures/big-20mb.json（性能用例跳过）');
   }
 
+  console.log('展开层级（快路径 / 惰性树）');
+
+  check('快路径：setExpandLevel(2) 后 depth<2 展开、>=2 折叠', () => {
+    const text = makeBig(2000);                       // >256KB，确保走快路径
+    assert(text.length >= 256 * 1024, '样本未达快路径阈值 ' + text.length);
+    const res = parser.parse(text);
+    assert(usedFastPath(res), '未走快路径（__sess 缺失）');
+    parser.setExpandLevel(res.root, 2);
+    parser.walk(res.root, () => {});                  // 全量物化
+    const m = {};
+    parser.walk(res.root, (n) => {
+      if (n.type === 'object' || n.type === 'array') {
+        m[n.depth] = m[n.depth] || { exp: 0, all: 0 };
+        m[n.depth].all++; if (n.expanded) m[n.depth].exp++;
+      }
+    });
+    assert(m[0].exp === m[0].all, 'depth0 未全展开');
+    assert(m[1].exp === m[1].all, 'depth1 未全展开');
+    for (const d in m) if (+d >= 2) assert(m[d].exp === 0, 'depth ' + d + ' 仍展开');
+  });
+
+  check('快路径：setExpandLevel("all") 恢复全展开且 deflt=true', () => {
+    const res = parser.parse(makeBig(2000));
+    assert(usedFastPath(res), '未走快路径');
+    parser.setExpandLevel(res.root, 2);
+    parser.setExpandLevel(res.root, 'all');
+    parser.walk(res.root, () => {});
+    parser.walk(res.root, (n) => {
+      if (n.type === 'object' || n.type === 'array')
+        assert(n.expanded === true, 'depth ' + n.depth + ' 仍折叠');
+    });
+    assert(res.root.__sess.deflt === true, 'deflt 未恢复为 true');
+  });
+
+  check('快路径：setExpandLevel(2) 不预物化 depth>=2 容器', () => {
+    const res = parser.parse(makeBig(2000));
+    assert(usedFastPath(res), '未走快路径');
+    parser.setExpandLevel(res.root, 2);
+    const ss = res.root.__sess;
+    let deep = 0, shallow = 0;
+    for (const n of ss.nodes) { if (n.depth >= 2) deep++; else shallow++; }
+    assert(deep === 0, 'setExpandLevel 后不应物化 depth>=2 容器，实际=' + deep);
+    assert(shallow >= 2, '应物化 root 与 list/meta，实际 shallow=' + shallow);
+  });
+
   console.log('\n' + pass + ' 通过, ' + fail + ' 失败');
   process.exit(fail ? 1 : 0);
 }

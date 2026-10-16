@@ -682,6 +682,64 @@
     });
   }
 
+  /**
+   * 按层级展开 / 折叠（对应查看器工具栏的「展开层级」下拉）。
+   *   level === 'all' 或非法值：全部展开（等价于 setAllExpanded(true)）。
+   *   level 为正整数 N：深度 < N 的容器展开，深度 >= N 的容器折叠
+   *     —— 即「展开到第 N 层」，更深的嵌套收成 {…} / […] 摘要。
+   *
+   * 惰性树路径：
+   *   · 'all' 只翻 deflt + 已物化容器，渲染时整棵自然展开（不预物化）。
+   *   · 有限层级：把「深度 < N」的容器物化并显式展开（浅层前缀，开销可控），
+   *     更深的不下钻——它们靠 deflt=false 在渲染 collect 时自然收起。
+   *     若只翻 deflt 而不物化浅层，后续物化的根/浅层容器也会拿到 false 被误收。
+   *   全程不 walk() 整棵惰性树（那会把 32 万节点物化出来、数百毫秒卡死）。
+   */
+  function setExpandLevel(root, level) {
+    if (!root) return;
+    var all = level === 'all' || !(typeof level === 'number' && level >= 1);
+    var sess = root.__sess;
+    if (sess) {
+      sess.deflt = all;
+      if (all) {
+        for (var i = 0; i < sess.nodes.length; i++) sess.nodes[i].expanded = true;
+        return;
+      }
+      walkToLevel(root, level);
+      return;
+    }
+    // strict 路径：节点已是完整树（小 JSON），直接全树行走按 depth 设标志，无妨
+    walk(root, function (n) {
+      if (n.type === 'object' || n.type === 'array') {
+        n.expanded = all ? true : n.depth < level;
+      }
+    });
+  }
+
+  /**
+   * 深度受限的行走：物化并展开「深度 < level」的容器，更深的不下钻、不物化。
+   * 显式栈（非递归）避免极深嵌套爆栈。关键性能点：只对 depth < level-1 的容器
+   * 下钻访问 entries/items（惰性 Proxy 按索引物化，O(可见容器数)）；depth == level-1
+   * 的容器只标 expanded=true 后立刻停手，绝不碰它的子节点 —— 否则「根下百万元素的
+   * 数组 + 选第 2 层」会把百万元素的边界层整层物化出来，毫秒级目标破功。
+   * depth >= level 的容器标 false 即可（未物化的靠 deflt=false 在渲染 collect 时收起）。
+   */
+  function walkToLevel(node, level) {
+    var stack = [node];
+    while (stack.length) {
+      var n = stack.pop();
+      if (n.type !== 'object' && n.type !== 'array') continue;
+      if (n.depth >= level) { n.expanded = false; continue; }   // 边界及以上：收起，不物化子
+      n.expanded = true;                                        // depth < level：展开
+      if (n.depth >= level - 1) continue;                       // 其子必为 depth>=level，无需物化/下钻
+      var kids = n.type === 'object' ? n.entries : n.items;
+      for (var i = 0; i < kids.length; i++) {
+        var c = n.type === 'object' ? kids[i].value : kids[i];
+        if (c && (c.type === 'object' || c.type === 'array')) stack.push(c);
+      }
+    }
+  }
+
   function parse(text, options) {
     options = options || {};
     if (typeof text !== 'string') text = String(text);
@@ -783,6 +841,7 @@
     walk: walk,
     stats: stats,
     setAllExpanded: setAllExpanded,
+    setExpandLevel: setExpandLevel,
     joinKey: joinKey,
     hasRawRisk: hasRawRisk,
     JsonParseError: JsonParseError

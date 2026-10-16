@@ -218,6 +218,22 @@
     '.jf-btn-solid.jf-btn-on{border-color:var(--jf-accent);background:var(--jf-accent-soft);',
     '  color:var(--jf-accent);}',
 
+    /* 工具栏「展开层级」下拉：复用工具栏实心按钮的视觉语言，靠主题变量自适应深浅 */
+    '.jf-level-label{font-size:12.5px;color:var(--jf-muted);user-select:none;',
+    '  line-height:30px;}',
+    '.jf-level{height:30px;padding:0 8px;border:1px solid var(--jf-border-strong);',
+    '  border-radius:8px;background:var(--jf-bg);color:var(--jf-text);font:inherit;',
+    '  font-size:12.5px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.06);',
+    '  -webkit-appearance:none;appearance:none;}',
+    '.jf-level:hover{border-color:var(--jf-accent);}',
+    '.jf-level:focus{outline:none;border-color:var(--jf-accent);',
+    '  box-shadow:0 0 0 2px var(--jf-accent-soft);}',
+    /* 下拉箭头（原生箭头在 -webkit-appearance:none 后消失，用背景图补一个） */
+    '.jf-level{background-image:linear-gradient(45deg,transparent 50%,var(--jf-muted) 50%),',
+    '  linear-gradient(135deg,var(--jf-muted) 50%,transparent 50%);',
+    '  background-position:calc(100% - 14px) 13px,calc(100% - 9px) 13px;',
+    '  background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:26px;}',
+
 
     /* ---------------- 正文（虚拟化：spacer + 视口窗口） ---------------- */
     '.jf-body{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;background:var(--jf-bg);',
@@ -472,6 +488,8 @@
     var outCache = { key: null, text: '' };
     /** 下一次 render() 是否保留滚动位置（就地编辑提交后重解析时用） */
     var keepScroll = false;
+    /** 当前展开层级：'all' 或正整数 N（展开到第 N 层）。默认全部展开 */
+    var expandLevel = 'all';
     /** 当前打开的就地编辑器 {node, kind, wrap, rowEl}；非 null 时冻结窗口重画 */
     var activeEdit = null;
 
@@ -587,6 +605,20 @@
           function () { opts.onEditRequest(); }, 'btn-solid');
         toolbar.appendChild(tb.edit);
       }
+
+      /* 展开层级下拉：默认全部展开；选 N 可只展开前 N 层，深层收成摘要。
+         大 JSON 收起深层嵌套后行表骤减，滚动/搜索都更轻。 */
+      tb.levelLabel = el('span', 'jf-level-label', '层级');
+      tb.level = el('select', 'jf-level');
+      tb.level.setAttribute('aria-label', '展开层级');
+      tb.level.title = '展开层级：默认全部展开；选择数字 N 可只展开前 N 层，更深的嵌套收成 {…} / […] 摘要';
+      populateLevelOptions();          // 解析前先放占位（仅「全部展开」）
+      tb.level.addEventListener('change', function () {
+        var v = tb.level.value;
+        applyExpandLevel(v === 'all' ? 'all' : Number(v));
+      });
+      toolbar.appendChild(tb.levelLabel);
+      toolbar.appendChild(tb.level);
 
       toolbar.appendChild(el('div', 'jf-spacer'));
 
@@ -1346,6 +1378,50 @@
       render();
     }
 
+    /**
+     * 按层级展开：深度 < level 的容器展开，其余折叠（level==='all' 即全展开）。
+     * 只改树的 expanded 标志（惰性树走解析器会话捷径，不物化整树），再让行表
+     * rebuild —— 行表只摊平可见分支，视口仍只渲染几十行，所以即便对大 JSON，
+     * 选「全部展开」也只是一次 O(可见行) 重排，选有限层级则远更轻。
+     * 结构性变化后回到顶部，符合「看前 N 层」的心智。
+     */
+    function applyExpandLevel(level) {
+      if (!state.root) return;
+      var lvl = level === 'all' ? 'all' : (typeof level === 'number' && level >= 1 ? level : 'all');
+      expandLevel = lvl;
+      parser.setExpandLevel(state.root, lvl);
+      if (model) {
+        model.rebuild();
+        body.scrollTop = 0;
+        layout();
+        updateWindow(true);
+      }
+      updateStats();
+    }
+
+    /**
+     * 按解析得到的最大深度填充层级下拉选项（全部展开 + 展开 1..cap 层）。
+     * 默认 cap 取 min(最大深度, 12)，既覆盖常见嵌套又避免下拉过长；解析前
+     * state.stats.depth 为 0，只放「全部展开」占位。当前选择会被保留。
+     */
+    function populateLevelOptions() {
+      if (!tb.level) return;
+      var sel = tb.level;
+      var maxD = state.stats.depth || 0;
+      var cap = Math.min(maxD, 12);
+      var cur = (expandLevel === 'all') ? 'all' : (expandLevel > cap ? 'all' : String(expandLevel));
+      while (sel.firstChild) sel.removeChild(sel.firstChild);
+      var oa = document.createElement('option');
+      oa.value = 'all'; oa.textContent = '全部展开';
+      sel.appendChild(oa);
+      for (var i = 1; i <= cap; i++) {
+        var o = document.createElement('option');
+        o.value = String(i); o.textContent = '展开 ' + i + ' 层';
+        sel.appendChild(o);
+      }
+      sel.value = cur;
+    }
+
 
     /* ---------------- 路径 ---------------- */
     function setPath(p) {
@@ -1530,11 +1606,14 @@
          注意：老路径的 setAllExpanded 内部会顺带 render()，新路径必须显式 render。 */
       if (res && typeof res.count === 'number') {
         state.stats = { count: res.count, depth: res.depth };
-        render();
       } else {
         state.stats = parser.stats(state.root);
-        setAllExpanded(true);
       }
+      /* 应用当前展开层级：默认 'all'（全部展开，与既有行为一致）；若用户此前
+         切过层级，新格式化的文档沿用同一层级，不必每次重选。 */
+      parser.setExpandLevel(state.root, expandLevel);
+      populateLevelOptions();
+      render();
       setPath('');
     }
 
@@ -1587,6 +1666,8 @@
     return {
       setText: setText,
       updateOptions: updateOptions,
+      /** 按层级展开：'all' 全展开，正整数 N 展开前 N 层（更深收成摘要） */
+      setExpandLevel: function (level) { applyExpandLevel(level); },
       destroy: destroy,
       outputText: outputText,
       /** 把行表第 index 行滚进视口（虚拟化后唯一的「显示某一行」入口） */

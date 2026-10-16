@@ -187,5 +187,57 @@ check('普通 JSON.parse 能解析的都能解析', () => {
   }
 });
 
+console.log('展开层级（setExpandLevel）');
+
+function countExpandedByDepth(root) {
+  const m = {};
+  parser.walk(root, (n) => {
+    if (n.type === 'object' || n.type === 'array') {
+      m[n.depth] = m[n.depth] || { exp: 0, all: 0 };
+      m[n.depth].all++;
+      if (n.expanded) m[n.depth].exp++;
+    }
+  });
+  return m;
+}
+
+check('默认解析后所有容器展开', () => {
+  const res = parser.parse('{"a":{"b":{"c":1}},"arr":[[1]]}');
+  const m = countExpandedByDepth(res.root);
+  for (const d in m) assert(m[d].exp === m[d].all, 'depth ' + d + ' 出现折叠容器');
+});
+
+check('setExpandLevel(1) 只展开根层（depth0）', () => {
+  const res = parser.parse('{"a":{"b":{"c":1}},"arr":[{"x":2}]}');
+  parser.setExpandLevel(res.root, 1);
+  const m = countExpandedByDepth(res.root);
+  assert(m[0].exp === m[0].all, 'depth0 有折叠');
+  for (const d in m) if (+d >= 1) assert(m[d].exp === 0, 'depth ' + d + ' 仍展开');
+});
+
+check('setExpandLevel(2) 展开 depth0、1，depth>=2 收起', () => {
+  const res = parser.parse('{"a":{"b":{"c":1}},"arr":[{"x":2}]}');
+  parser.setExpandLevel(res.root, 2);
+  const m = countExpandedByDepth(res.root);
+  assert(m[0].exp === m[0].all, 'depth0 有折叠');
+  assert(m[1].exp === m[1].all, 'depth1 有折叠');
+  for (const d in m) if (+d >= 2) assert(m[d].exp === 0, 'depth ' + d + ' 仍展开');
+});
+
+check('setExpandLevel("all") 恢复全展开', () => {
+  const res = parser.parse('{"a":{"b":{"c":1}},"arr":[{"x":2}]}');
+  parser.setExpandLevel(res.root, 2);
+  parser.setExpandLevel(res.root, 'all');
+  const m = countExpandedByDepth(res.root);
+  for (const d in m) assert(m[d].exp === m[d].all, 'depth ' + d + ' 仍有折叠');
+});
+
+check('setExpandLevel(0) 视为非法、按全展开处理', () => {
+  const res = parser.parse('{"a":{"b":1}}');
+  parser.setExpandLevel(res.root, 0);
+  const m = countExpandedByDepth(res.root);
+  for (const d in m) assert(m[d].exp === m[d].all, 'depth ' + d + ' 被误折叠');
+});
+
 console.log('\n' + pass + ' 通过, ' + fail + ' 失败');
 process.exit(fail ? 1 : 0);
