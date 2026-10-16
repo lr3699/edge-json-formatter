@@ -86,6 +86,17 @@ SITE_FAVICON_STROKE = SMALL_STROKE[16]
 STORE_LOGO_FORCE_SMALL = True
 GAP = 24                      # 排版间距，避免截图 clip 相互沾边
 
+# 透明底 —— 圆角外必须是 alpha=0，不能是白色（2026-10-16 修复）
+#
+# 症状：深色工具栏里图标四周有一圈白边（用户实测反馈）。
+# 根因：Page.captureScreenshot 默认把页面**合成到不透明白底**上，产出的 PNG 是
+#       colorType=2（RGB，无 alpha 通道），圆角方块的四个角于是被填成纯白 #FFFFFF。
+#       这不是 SVG 画多了描边，而是「背景色」问题——页面自身 html/body 已经是
+#       transparent，少的是浏览器默认底色的透明化。
+# 修法：抓图前 Emulation.setDefaultBackgroundColorOverride 把默认底色设成全透明，
+#       与 Puppeteer 的 omitBackground 同源；抓完再复位。
+CAPTURE_TRANSPARENT = True
+
 
 def _corner(right):
     """角括号路径。左「：顶横笔向右、竖笔向下；右」：底横笔向左、竖笔向上。"""
@@ -147,7 +158,11 @@ def svg(inner):
 def page_with(entries):
     """把若干 (key, size, svg) 绝对定位排开，返回 (html, {key: x})。"""
     parts = ['<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
-             'html,body{margin:0;padding:0;background:transparent}</style></head><body>']
+             'html,body{margin:0;padding:0;background:transparent}'
+             # svg 默认是 inline 元素，会受行内基线对齐影响。显式 block 后，
+             # svg 的盒子严格等于外层 div（探针实测：加不加都对齐，但加上更保险）。
+             'svg{display:block}'
+             '</style></head><body>']
     xs, x = {}, 0
     for key, size, code in entries:
         parts.append('<div style="position:absolute;left:%dpx;top:0;width:%dpx;height:%dpx">%s</div>'
@@ -163,6 +178,82 @@ def ev(client, expr):
     if isinstance(raw, dict):
         raw = raw.get("value", raw)
     return raw
+
+
+def set_transparent_bg(c, on):
+    """开关「默认底色透明」。
+
+    必须在设置 deviceMetricsOverride / bringToFront 之后调用；off 时用 null
+    复位（CDP 约定：Override 传 null 表示清除覆盖）。
+    """
+    if not CAPTURE_TRANSPARENT:
+        return
+    c.send("Emulation.setDefaultBackgroundColorOverride",
+           {"color": {"r": 0, "g": 0, "b": 0, "a": 0}} if on else None)
+
+
+def settle(c, frames=3):
+    """等布局/绘制稳定：清滚动 + 连续等若干帧。
+
+    首帧竞态实测：紧跟 navigate 就截图，偶尔会拿到「形状整体下移、底部被裁」的
+    中间态帧（四角仍透明，但行 alpha 之和明显不对称）。本函数与 inspect_icon 的
+    重试一起把这个坑按住。
+
+    注：CDPClient.evaluate 写死了 awaitPromise=False，带 awaitPromise 的调用
+    必须直接走 send；同时保留同步 reflow 兜底（后台标签页会节流 rAF）。
+    """
+    sync = "(function(){window.scrollTo(0,0);return document.body.offsetHeight;})()"
+    try:
+        c.send("Runtime.evaluate", {
+            "expression": "(new Promise(function(res){window.scrollTo(0,0);var n=0;"
+                          "(function tick(){ if(++n>=%d){res(document.body.offsetHeight);return;}"
+                          "requestAnimationFrame(tick);})();}))" % frames,
+            "awaitPromise": True, "returnByValue": True}, timeout=30)
+    except Exception:
+        c.evaluate(sync, timeout=30)
+
+
+def inspect_icon(path):
+    """返回 (是否通过, 说明)。两项断言：
+
+    1. 四角 alpha=0 —— 圆角外必须透明；填成白色就是用户看到的「白边」；
+    2. alpha 上下、左右镜像对称（行/列 alpha 之和相等，容差 1%）。
+       第 2 条专抓「首帧竞态导致截图整体错位 / 底部被裁」——那类问题四角可能也是
+       透明的，但形状整体偏下，行和立刻不对称。
+    """
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        from png_read import read_png
+    except Exception as exc:                       # 纯标准库，正常不会失败
+        return True, "跳过校验（%s）" % exc
+    im = read_png(str(path))
+    w, h = im.width, im.height
+    corners = {k: im.px(*p)[3] for k, p in
+               (("左上", (0, 0)), ("右上", (w - 1, 0)),
+                ("左下", (0, h - 1)), ("右下", (w - 1, h - 1)))}
+    bad = {k: v for k, v in corners.items() if v != 0}
+    if bad:
+        return False, "四角不透明（白边）：%s" % bad
+    rowsum = [sum(im.px(x, y)[3] for x in range(w)) for y in range(h)]
+    colsum = [sum(im.px(x, y)[3] for y in range(h)) for x in range(w)]
+    for name, arr in (("上下", rowsum), ("左右", colsum)):
+        tol = 0.01 * max(arr) + 4 * len(arr)
+        for i in range(len(arr) // 2):
+            d = abs(arr[i] - arr[len(arr) - 1 - i])
+            if d > tol:
+                return False, "%s不对称：第%d行/列 %d vs %d（差 %d）" % (
+                    name, i, arr[i], arr[len(arr) - 1 - i], d)
+    return True, "四角 alpha=0，上下左右对称"
+
+
+def assert_transparent(path, label):
+    """打印式包装：把 inspect_icon 的结果转成命令行输出。"""
+    ok, why = inspect_icon(path)
+    if not ok:
+        print("  !! %s 校验未通过：%s" % (label, why), file=sys.stderr)
+        return False
+    print("  %s ✓ %s" % (label, why))
+    return True
 
 
 def measure(c):
@@ -284,6 +375,8 @@ def main():
     c.send("Emulation.setDeviceMetricsOverride",
            {"width": 1400, "height": 800, "deviceScaleFactor": 1, "mobile": False})
     c.send("Page.bringToFront")
+    # 圆角外要透明，不能是白底（见 CAPTURE_TRANSPARENT 说明）
+    set_transparent_bg(c, True)
 
     out_dir = ROOT / "icons"
     docs = ROOT / "docs" / "icon-redesign"
@@ -317,17 +410,28 @@ def main():
     c.send("Page.bringToFront")
 
     def shot(key, size, out, label):
-        res = c.send("Page.captureScreenshot", {
-            "format": "png",
-            "clip": {"x": xs[key], "y": 0, "width": size, "height": size, "scale": 1},
-        })
-        data = res.get("data")
-        if not data:
-            print("%s 截图失败" % label, file=sys.stderr)
-            return False
-        out.write_bytes(base64.b64decode(data))
-        print("写入 %s（%d 字节）" % (out.relative_to(ROOT), out.stat().st_size))
-        return True
+        """截图 → 落盘 → 自检；自检不过就再等几帧重截一次。
+
+        自检见 inspect_icon：四角必须 alpha=0（否则是白边），且 alpha 上下/左右
+        对称（否则是首帧竞态导致的错位帧）。最多两次，仍不过就报错退出——
+        宁可让出图失败，也不要落一张有白边或错位的图标。
+        """
+        for attempt in (1, 2):
+            settle(c, 3 * attempt)
+            res = c.send("Page.captureScreenshot", {
+                "format": "png",
+                "clip": {"x": xs[key], "y": 0, "width": size, "height": size, "scale": 1},
+            })
+            data = res.get("data")
+            if not data:
+                print("%s 截图失败" % label, file=sys.stderr)
+                return False
+            out.write_bytes(base64.b64decode(data))
+            print("写入 %s（%d 字节，第 %d 次）"
+                  % (out.relative_to(ROOT), out.stat().st_size, attempt))
+            if assert_transparent(out, label):
+                return True
+        return False
 
     for size in SIZES:
         name = "store-icon-300.png" if size == 300 else "icon%d.png" % size
@@ -339,6 +443,8 @@ def main():
     if site_dir.is_dir():
         if not shot("fav", SITE_FAVICON_SIZE, site_dir / "favicon.png", "站点 favicon"):
             return 1
+    # 图标已全部落盘，复位默认底色（后面抓的是带自己底色的文档页）
+    set_transparent_bg(c, False)
 
     # ------------------------------------------------------------ 预览页 --
     def cell(size, zoom):

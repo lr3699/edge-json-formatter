@@ -1,0 +1,85 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<title>JSON Duo 图标 · 圆角白边修复</title><style>
+body{background:#111318;color:#E5E7EB;margin:0;padding:26px 30px 30px;
+ font-family:"Segoe UI","Microsoft YaHei",sans-serif}
+h1{font-size:15px;font-weight:600;margin:0 0 6px}
+p.lede{color:#9CA3AF;font-size:11.5px;line-height:1.78;margin:0 0 20px;max-width:1000px}
+p.lede b{color:#E5E7EB}
+h2{font-size:11px;color:#8B93A3;font-weight:500;letter-spacing:.06em;
+ text-transform:uppercase;margin:24px 0 10px}
+.panel{border-radius:10px;padding:16px 18px 6px}
+.dark{background:#2B2C2F;color:#E8EAED}
+.light{background:#E8EAEC;color:#3C4043}
+.mid{background:#6E6E72}
+.row{display:flex;align-items:center;gap:18px;margin-bottom:12px}
+.tag{width:186px;flex:0 0 186px;font-size:12px;font-weight:600;line-height:1.5}
+.tag em{display:block;font-style:normal;font-size:10px;opacity:.62;font-weight:400}
+.strip{display:flex;align-items:flex-end;gap:22px}
+.slot{display:inline-flex;align-items:center;justify-content:center}
+img{display:block;image-rendering:auto}
+figure{margin:0;text-align:center}
+figcaption{font-size:10px;color:#8B93A3;margin-top:6px}
+</style></head><body>
+
+<h1>JSON Duo 图标 —— 圆角外的白边修复</h1>
+<p class="lede">
+<b>根因一（白边）</b>：出图走 CDP <b>Page.captureScreenshot</b>，该接口默认把页面合成到
+<b>不透明白底</b>上，产出的 PNG 是 colorType=2（RGB，<b>无 alpha 通道</b>），圆角方块之外
+于是被填成纯白 <b>#FFFFFF</b>。深色工具栏上就是一圈白边。<br>
+<b>修法</b>：抓图前用 <b>Emulation.setDefaultBackgroundColorOverride</b> 把浏览器默认底色设为
+全透明（与 Puppeteer 的 omitBackground 同源），四角恢复 alpha=0，PNG 变为 colorType=6。<br>
+<b>根因二（16px 错位）</b>：紧跟 navigate 就截图，偶尔拿到布局未稳的中间态帧 ——
+黑色方块被下推约 3px、底部被裁。修法是出图前 <b>settle()</b>（清滚动 + 等 3 帧 + 逼同步布局），
+出图后 <b>自检四角透明 + alpha 上下左右对称</b>，不过就重截，仍不过则报错退出。
+<br>下面全部是<b>真实尺寸</b>，没有缩放。
+</p>
+
+<h2>深色工具栏（#2B2C2F）</h2>
+<div class="panel dark">
+  <div class="row"><div class="tag">改前<em>四角纯白；16px 还整体下移被裁</em></div><div class="strip">
+    <span class="slot" style="width:20px;height:20px"><img src="prev-white-border/icon16.png" width="16" height="16" alt=""></span>
+    <span class="slot" style="width:32px;height:32px"><img src="prev-white-border/icon32.png" width="32" height="32" alt=""></span>
+    <span class="slot" style="width:48px;height:48px"><img src="prev-white-border/icon48.png" width="48" height="48" alt=""></span>
+    <span class="slot" style="width:128px;height:128px"><img src="prev-white-border/icon128.png" width="128" height="128" alt=""></span>
+  </div></div>
+  <div class="row"><div class="tag">改后<em>四角 alpha=0，形状居中</em></div><div class="strip">
+    <span class="slot" style="width:20px;height:20px"><img src="../../icons/icon16.png" width="16" height="16" alt=""></span>
+    <span class="slot" style="width:32px;height:32px"><img src="../../icons/icon32.png" width="32" height="32" alt=""></span>
+    <span class="slot" style="width:48px;height:48px"><img src="../../icons/icon48.png" width="48" height="48" alt=""></span>
+    <span class="slot" style="width:128px;height:128px"><img src="../../icons/icon128.png" width="128" height="128" alt=""></span>
+  </div></div>
+</div>
+
+<h2>浅色工具栏（#E8EAEC）</h2>
+<div class="panel light">
+  <div class="row"><div class="tag">改前<em>白角在浅底上更抢眼</em></div><div class="strip">
+    <span class="slot" style="width:20px;height:20px"><img src="prev-white-border/icon16.png" width="16" height="16" alt=""></span>
+    <span class="slot" style="width:32px;height:32px"><img src="prev-white-border/icon32.png" width="32" height="32" alt=""></span>
+    <span class="slot" style="width:48px;height:48px"><img src="prev-white-border/icon48.png" width="48" height="48" alt=""></span>
+    <span class="slot" style="width:128px;height:128px"><img src="prev-white-border/icon128.png" width="128" height="128" alt=""></span>
+  </div></div>
+  <div class="row"><div class="tag">改后<em>与底色融为一体</em></div><div class="strip">
+    <span class="slot" style="width:20px;height:20px"><img src="../../icons/icon16.png" width="16" height="16" alt=""></span>
+    <span class="slot" style="width:32px;height:32px"><img src="../../icons/icon32.png" width="32" height="32" alt=""></span>
+    <span class="slot" style="width:48px;height:48px"><img src="../../icons/icon48.png" width="48" height="48" alt=""></span>
+    <span class="slot" style="width:128px;height:128px"><img src="../../icons/icon128.png" width="128" height="128" alt=""></span>
+  </div></div>
+</div>
+
+<h2>放大观察</h2>
+<div class="panel mid">
+  <div class="row"><div class="tag">16px 放大 8 倍<em>工具栏里跑的正是这一枚</em></div><div class="strip">
+    <figure><img src="prev-white-border/icon16.png" width="128" height="128" alt="">
+      <figcaption>改前：纯白边 + 形状下移被裁</figcaption></figure>
+    <figure><img src="../../icons/icon16.png" width="128" height="128" alt="">
+      <figcaption>改后：四角透明、图形居中</figcaption></figure>
+  </div></div>
+  <div class="row"><div class="tag">32px 放大 4 倍<em>125% 缩放屏上工具栏取这一档</em></div><div class="strip">
+    <figure><img src="prev-white-border/icon32.png" width="128" height="128" alt="">
+      <figcaption>改前：一圈白边</figcaption></figure>
+    <figure><img src="../../icons/icon32.png" width="128" height="128" alt="">
+      <figcaption>改后：无白边</figcaption></figure>
+  </div></div>
+</div>
+
+</body></html>
