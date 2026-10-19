@@ -36,6 +36,11 @@
   var pillTextEl = $('pillText');
   var panelInput = $('panelInput');
   var splitterEl = $('splitter');
+  /** 顶栏主题按钮（三档循环：跟随系统 → 浅色 → 深色，见 editor.html） */
+  var btnThemeAuto = $('btnThemeAuto');
+  /** 主题档位循环顺序与文案（顶栏按钮 / 设置面板共用一套） */
+  var THEME_ORDER = ['auto', 'light', 'dark'];
+  var THEME_LABEL = { auto: '跟随系统', light: '浅色', dark: '深色' };
 
   /** 输入变化后自动格式化的防抖间隔 */
   var DEBOUNCE_MS = 220;
@@ -236,6 +241,10 @@
       inputEl.value = text;
     }
     updateStats();
+    // 顶栏「编辑」钮的禁用态跟着内容走：init 时它是禁用的（空文档），
+    // 之后所有「内容到达」的路径都必须补刷一次，否则粘贴/示例/拖文件之后
+    // 按钮还停在禁用态——而 setEditMode 自己只被点击触发，不会自愈。
+    syncEditButton();
   }
 
   function el(tag, cls, text) {
@@ -264,8 +273,8 @@
         syncFromRight(text, 'tree', meta && meta.path);
         if (viewer) viewer.setText(text, { keepScroll: true });
       },
-      // 树视图工具条上的「编辑」按钮：切到右侧可编辑文本模式
-      onEditRequest: function () { setEditMode(true); },
+      /* 树工具条上的「编辑」按钮已下线（2026-10-19）：进 / 出编辑只走顶栏
+         「编辑 ⇄ 完成编辑」钮（setEditMode 双向切换），右栏不再放第二个入口。 */
       // 树视图工具条上的「文本」按钮：从树视图切回完整文本（大文档）视图
       onTextViewRequest: function () { setBigMode(true); },
       onThemeChange: function (resolved, raw) {
@@ -279,6 +288,9 @@
       onSettingsChange: function (patch) {
         Object.assign(settings, patch);
         NS.saveSettings(patch);
+        // viewer 工具条改主题档位时，本页不会经过 applySettingsToViewer，
+        // 顶栏「跟随系统」的选中态要在这里补一次刷新
+        if (patch.theme) syncThemeAutoButton();
       }
     });
   }
@@ -435,8 +447,6 @@
     // 工具条是可选装饰：宿主里没这个节点也不能连累正文渲染
     // （曾经就因为它是 null，这里一抛异常，整段格式化结果都不显示）
     if (bigToolbarEl) bigToolbarEl.hidden = true;
-    // 离开大文档视图：顶栏与底部状态带恢复正常，输入栏也交回给用户
-    setBigDocMode(false);
   }
 
   /* 树视图 ⇄ 大文档（全文）视图的手动切换。
@@ -606,8 +616,6 @@
    */
   var bigToolbarEl = $('bigToolbar');
   var bt = {};
-  var BT_THEME_ORDER = ['auto', 'light', 'dark'];
-  var BT_THEME_LABEL = { auto: '跟随系统', light: '浅色', dark: '深色' };
 
   function btBtn(label, icon, title, handler, variant) {
     var b = document.createElement('button');
@@ -671,27 +679,11 @@
     }, 'btn-solid');
     bigToolbarEl.appendChild(bt.wrap);
 
-    bt.theme = btBtn('主题', 'theme', '', function () {
-      var i = BT_THEME_ORDER.indexOf(settings.theme);
-      settings.theme = BT_THEME_ORDER[(i < 0 ? 0 : i + 1) % BT_THEME_ORDER.length];
-      NS.saveSettings({ theme: settings.theme });
-      // 与树视图的主题按钮同一条路径：先换整页底色，再推给两个视图
-      applyPageTheme(resolvedTheme());
-      applySettingsToViewer();
-    }, 'btn-solid');
-    bigToolbarEl.appendChild(bt.theme);
-
-    // 美化 ⇄ 压缩：与树视图那条按钮同一套语义（文案写当前模式，点了切到另一种）
-    bt.mode = btBtn('美化', null, '', function () {
-      if (!bigView) return;
-      bigView.format(null, !bigView.getState().compact);
-      refreshBigStatus();
-      syncBigToolbar();
-      /* 重排后右栏的文本变了，同样要落回左栏 —— 否则一按「压缩」，
-         右栏是单行、左栏还是展开的，两个视图当场分叉 */
-      if (editMode) syncFromRight(bigView.getText(), 'format');
-    }, 'btn-solid');
-    bigToolbarEl.appendChild(bt.mode);
+    /* 主题循环钮与「美化 / 压缩」输出切换钮已按「功能精简」下线（2026-10-19）：
+       主题档位统一走顶栏右上角那枚三档循环钮（跟随系统 / 浅色 / 深色），
+       右栏输出恒为美化（缩进展开），要单行文本用左栏「压缩」按钮
+       （对源文本做压缩，回灌后重新排版）。
+       bigView.format(indent, compact) 的压缩能力保留在 API 里，只是不再放入口。 */
 
     var sp = document.createElement('div');
     sp.className = 'jf-spacer';
@@ -728,22 +720,9 @@
       bt.wrap.classList.toggle('jf-btn-on', !!settings.wrap);
       bt.wrap.title = '自动折行：' + (settings.wrap ? '已开启' : '已关闭（超宽可横向滚动）') + '（点击切换）';
     }
-    if (bt.theme) {
-      setBtLabel(bt.theme, BT_THEME_LABEL[settings.theme] || '主题');
-      bt.theme.classList.toggle('jf-btn-on', settings.theme !== 'auto');
-      bt.theme.title = '主题：' + (BT_THEME_LABEL[settings.theme] || '跟随系统') + '（点击切换）';
-    }
-    if (bt.mode) {
-      var compact = !!(bigView && bigView.getState().compact);
-      setBtLabel(bt.mode, compact ? '压缩' : '美化');
-      bt.mode.classList.toggle('jf-btn-on', compact);
-      bt.mode.title = compact
-        ? '输出：压缩（单行）——点击切换为美化'
-        : '输出：美化（缩进展开）——点击切换为压缩';
-    }
   }
 
-  /** 大文档排版完成后刷新底部状态；压缩 / 美化切换会改行数，所以要能单独调用 */
+  /** 大文档排版完成后刷新底部状态；换文档 / 改设置会改行数，所以要能单独调用 */
   function refreshBigStatus() {
     if (!bigView) return;
     var st = bigView.getState();
@@ -816,7 +795,6 @@
     if (bigToolbarEl) bigToolbarEl.hidden = false;
     bt.folded = false;
     syncBigToolbar();
-    setBigDocMode(true);
 
     var bv = ensureBigView();
     // 排版是同步的：29MB 压缩 JSON → 约 700ms（原生） / 1.2s（保真路径）。
@@ -881,7 +859,6 @@
 
     if (!text.trim()) {
       lastRendered = null;
-      setBigDocMode(false);
       if (viewer) showOutput(false);
       clearViewInfo();
       setPill('', '就绪');
@@ -981,6 +958,7 @@
     // 直接读 textarea 的值作为内存源（小文本，实时编辑）。
     sourceText = inputEl.value;
     bigMode = null;               // 左栏内容是新的：恢复「按体积自动选视图」
+    syncEditButton();             // 有内容了，「编辑」钮就该亮起来
     if (e && e.inputType === 'insertFromPaste') inputKind = 'paste';
     scheduleFormat();
   });
@@ -1082,7 +1060,6 @@
     if (viewer) showOutput(false);
     if (bigHost) bigHost.hidden = true;
     if (bigToolbarEl) bigToolbarEl.hidden = true;
-    setBigDocMode(false);
     setPill('', '就绪');
     setMessage('');
     inputEl.focus();
@@ -1108,28 +1085,15 @@
   // 没有内容时「编辑」不可点：进去也是空编辑器
   syncEditButton();
 
-  /* ---------------- 输入转换工具（转换 ▾ 菜单） ----------------
-   * 五个功能全部是 O(n) 单遍处理，不做 JSON.parse / stringify 整棵树
+  /* ---------------- 输入转换工具 ----------------
+   * 三个功能全部是 O(n) 单遍处理，不做 JSON.parse / stringify 整棵树
    * （压缩尤其如此：直接对原文做空白/注释剥离，大整数精度原样保留，
    * 宽松写法——单引号、注释、尾随逗号——也不会出错）。
    * 结果统一走 setInputText：大文本自动切虚拟原文视图，不卡 textarea。
+   *
+   * 按钮与功能一一对应、不再「自动识别方向」：转义、去转义各一枚，
+   * 压缩一枚。原「中文⇄U」双向钮已下线（要 \uXXXX 形态可先转义再手动替换）。
    */
-
-  // 中文（所有非 ASCII 可见字符）→ \uXXXX。单遍正则替换，原生实现最快。
-  function toUnicode(text) {
-    return text.replace(/[\u0080-\uFFFF]/g, function (ch) {
-      var code = ch.charCodeAt(0).toString(16);
-      while (code.length < 4) code = '0' + code;
-      return '\\u' + code;
-    });
-  }
-
-  // \uXXXX → 原字符。代理对（emoji 等）由 fromCharCode 自然拼回。
-  function fromUnicode(text) {
-    return text.replace(/\\u([0-9a-fA-F]{4})/g, function (m, hex) {
-      return String.fromCharCode(parseInt(hex, 16));
-    });
-  }
 
   // 转义：整段文本变成一个带引号的 JSON 字符串（native stringify，O(n)）
   function escapeJson(text) {
@@ -1214,10 +1178,8 @@
   }
 
   var XFORMS = {
-    toUnicode:   { fn: toUnicode,   label: '中文转 Unicode' },
-    fromUnicode: { fn: fromUnicode, label: 'Unicode 转中文' },
     escape:      { fn: escapeJson,  label: '转义' },
-    unescape:    { fn: unescapeJson, label: '去除转义' },
+    unescape:    { fn: unescapeJson, label: '去转义' },
     minify:      { fn: minifyJsonText, label: '压缩' }
   };
 
@@ -1249,17 +1211,16 @@
     setMessage(spec.label + '完成 · ' + formatBytes(out.length) + ' · ' + ms + 'ms', 'ok');
   }
 
-  /* 两枚双向按钮：方向自动识别 */
-  var btnUniToggle = $('btnUniToggle');
-  if (btnUniToggle) btnUniToggle.addEventListener('click', function () {
-    // 检测到 \u 转义 → 还原成中文；否则 → 转成 \uXXXX
-    applyXform(/\\u[0-9a-fA-F]{4}/.test(sourceText) ? 'fromUnicode' : 'toUnicode');
+  /* 转义 / 去转义：两枚独立按钮，方向由用户明说，不再自动识别。
+     （自动识别在「粘贴一段带引号的转义串」和「粘一段普通 JSON」之间靠首字符
+     猜方向，猜错时用户看到的是「没反应」或「被转义了两层」，不如给两个按钮。） */
+  var btnEscape = $('btnEscape');
+  if (btnEscape) btnEscape.addEventListener('click', function () {
+    applyXform('escape');
   });
-  var btnEscToggle = $('btnEscToggle');
-  if (btnEscToggle) btnEscToggle.addEventListener('click', function () {
-    // 整段以引号开头 → 还原；否则 → 转义
-    var t = (sourceText || '').replace(/^\uFEFF/, '').trim();
-    applyXform(t.charAt(0) === '"' ? 'unescape' : 'escape');
+  var btnUnescape = $('btnUnescape');
+  if (btnUnescape) btnUnescape.addEventListener('click', function () {
+    applyXform('unescape');
   });
   var btnMinify = $('btnMinify');
   if (btnMinify) btnMinify.addEventListener('click', function () {
@@ -1413,14 +1374,13 @@
     }
   });
 
-  /* ---------------- 输入栏收起 / 大文档最大化 ---------------- */
+  /* ---------------- 输入栏收起 ----------------
 
-  /* 两件互相独立的事：
-       is-solo    —— 左栏与分隔条让位，输出独占整宽（JSON 区从半宽变整宽）；
-       is-bigdoc  —— 大文档正在展示，顶栏、外边距、底部状态带一起收窄。
-     输入栏显隐**只由 is-solo 决定**，来源只有两个：用户点按钮，或全屏的默认沉浸。
-     大文档不再自动收起它 —— 大文档恰恰更需要「左边原文、右边结果」对照着看，
-     把输入栏抢走是反直觉的（用户明确反馈过「不要默认」）。 */
+     输入栏显隐只由 is-solo 决定，来源只有两个：用户点按钮，或全屏的默认沉浸。
+     大文档（全文视图）不再连带收起它 —— 大文档恰恰更需要「左边原文、右边结果」
+     对照着看，把输入栏抢走是反直觉的（用户明确反馈过「不要默认」）。
+     曾经的 is-bigdoc 还会压窄顶栏 / 底栏，导致「树 ⇄ 文本」一切换就抖
+     （2026-10-19 已全部收回，两种视图 chrome 尺寸一致，切换零位移）。 */
   var btnSolo = $('btnSolo');
   var soloLabel = $('soloLabel');
   /** null = 跟随自动（仅全屏）；true / false = 用户手动指定，手动永远优先 */
@@ -1451,12 +1411,6 @@
     });
   }
 
-  /** 大文档模式开关：只收窄顶栏与底部状态带。
-   *  刻意**不动**输入栏 —— 原因见上面 soloWanted() 的注释。 */
-  function setBigDocMode(on) {
-    document.body.classList.toggle('is-bigdoc', !!on);
-  }
-
   /* ---------------- 设置同步 ---------------- */
 
   /**
@@ -1476,6 +1430,37 @@
       resolved === 'dark' ? 'dark' : 'light');
   }
 
+  /**
+   * 顶栏主题按钮的状态刷新（三档循环钮）。
+   *
+   * 文案 = 当前档位（跟随系统 / 浅色 / 深色），aria-pressed 在「跟随系统」
+   * 时点亮（accent 蓝高亮，见 editor.css）。主题档位有三个入口都可能改它：
+   * 本按钮、设置面板（chrome.storage.onChanged）、站点 URL 参数，
+   * 所以状态刷新挂在两个必经之路上——applySettingsToViewer() 与
+   * onSettingsChange，而不是写在各入口里。
+   */
+  function syncThemeAutoButton() {
+    if (!btnThemeAuto) return;
+    var cur = THEME_ORDER.indexOf(settings.theme) >= 0 ? settings.theme : 'auto';
+    var labelEl = $('btnThemeAutoLabel');
+    if (labelEl) labelEl.textContent = THEME_LABEL[cur];
+    btnThemeAuto.setAttribute('aria-pressed', cur === 'auto' ? 'true' : 'false');
+    var next = THEME_LABEL[THEME_ORDER[(THEME_ORDER.indexOf(cur) + 1) % THEME_ORDER.length]];
+    btnThemeAuto.title = '主题：' + THEME_LABEL[cur] + '（点击切换为' + next + '）';
+  }
+
+  if (btnThemeAuto) {
+    btnThemeAuto.addEventListener('click', function () {
+      var i = THEME_ORDER.indexOf(settings.theme);
+      settings.theme = THEME_ORDER[(i < 0 ? 0 : i + 1) % THEME_ORDER.length];
+      NS.saveSettings({ theme: settings.theme });
+      applyPageTheme(resolvedTheme());
+      applySettingsToViewer();
+      syncThemeAutoButton();
+      setMessage('主题已切换为：' + THEME_LABEL[settings.theme], 'ok');
+    });
+  }
+
   function applySettingsToViewer() {
     if (viewer) viewer.updateOptions(viewerOptions());
     if (bigView) {
@@ -1488,11 +1473,13 @@
       });
     }
     syncBigToolbar();
+    syncThemeAutoButton();
   }
 
   NS.loadSettings().then(function (loaded) {
     settings = loaded;
     applySettingsToViewer();
+    syncThemeAutoButton();
     // viewer 尚未创建时（打开页面还没粘贴内容），也要按已存主题铺底色
     if (!viewer) {
       var theme = settings.theme;
@@ -1529,6 +1516,9 @@
   showOutput(false);
   // 初始化「输入栏收起」按钮的文案/状态（默认展开）
   applySoloState();
+  // 顶栏「跟随系统」按钮的初始选中态（此时 settings 还是 DEFAULTS，
+  // loadSettings 完成后还会再刷新一次）
+  syncThemeAutoButton();
   // 打开就聚焦，点完扩展图标可以直接 Ctrl+V
   inputEl.focus();
 

@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-shoot.py —— 批量重拍扩展截图（v1.1.3：工具栏精简 + 全展开 + 压缩真生效 + 全局深色）。
+shoot.py —— 批量重拍扩展截图（v1.1.11：输入栏转换钮拆分 + 顶栏「跟随系统」+
+输出恒美化；2026-10-19 起「压缩 / 美化」输出切换与「中文⇄U」按钮已下线，
+相关截图步骤随之移除）。
 
 自包含：自己启动带扩展的 Edge（CDP 调试模式），自己起假接口服务，
 按脚本顺序截图到 docs/shots/ 与 docs/，最后打印结果清单。
@@ -48,15 +50,20 @@ window.__jfButtons = function () {
   var root = window.__jfRoot();
   return root ? root.querySelectorAll('.jf-toolbar button') : [];
 };
+/* 主题三档循环钮：2026-10-19 起统一在顶栏右上角（跟随系统 → 浅色 → 深色），
+   右侧树工具条 / 大文档工具条的循环钮已下线。 */
 window.__jfClick = function (match) {
-  var btns = window.__jfButtons();
-  for (var i = 0; i < btns.length; i++) {
-    var t = btns[i].title || '', txt = btns[i].textContent || '';
-    if (match === 'theme' && t.indexOf('主题') >= 0) { btns[i].click(); return 'theme'; }
-    if (match === 'escape' && txt.indexOf('保留转义') >= 0) { btns[i].click(); return 'escape'; }
-    if (match === 'mode' && (txt === '压缩' || txt === '美化')) { btns[i].click(); return 'mode'; }
+  if (match === 'theme') {
+    var b = document.getElementById('btnThemeAuto');
+    if (b) { b.click(); return 'theme'; }
+    return 'NOT_FOUND:btnThemeAuto';
   }
   return 'NOT_FOUND:' + match;
+};
+/* 顶栏主题按钮的当前档位文案 */
+window.__jfThemeLabel = function () {
+  var b = document.getElementById('btnThemeAuto');
+  return b ? (b.textContent || '').trim() : null;
 };
 """
 
@@ -165,13 +172,21 @@ def main():
     client.send("Emulation.setDeviceMetricsOverride",
                 {"width": 1280, "height": 800, "deviceScaleFactor": 1, "mobile": False})
 
-    # 主题状态查询：读工具栏主题按钮的文案（跟随系统/浅色/深色）
-    JS_THEME_LABEL = "(function(){var b=window.__jfButtons();for(var i=0;i<b.length;i++){if((b[i].title||'').indexOf('主题')>=0)return b[i].textContent; }return null;})()"
-    # 输出模式查询：压缩/美化按钮文案
-    JS_MODE_LABEL = "(function(){var b=window.__jfButtons();for(var i=0;i<b.length;i++){var t=b[i].textContent;if(t==='压缩'||t==='美化')return t;}return null;})()"
+    # 主题状态查询：读顶栏右上角三档循环钮的文案（跟随系统/浅色/深色）
+    JS_THEME_LABEL = "window.__jfThemeLabel()"
+
+    def set_system_theme(mode):
+        """模拟系统深浅色（auto 档位下直接生效）。
+        接管视图没有顶栏按钮（主题入口统一到编辑页/站点），
+        所以网页浮层的截图靠这条通路切深浅。"""
+        client.send("Emulation.setEmulatedMedia", {
+            "features": [{"name": "prefers-color-scheme", "value": mode}]
+        })
+        time.sleep(0.5)
 
     def click_theme_until(target_label, max_clicks=3):
-        """循环点击主题按钮直到文案变为目标（跟随系统/浅色/深色）。"""
+        """循环点击顶栏主题按钮直到文案变为目标（跟随系统/浅色/深色）。
+        仅用于有顶栏的页面（编辑页 / 站点）。"""
         for _ in range(max_clicks):
             cur = ev(client, JS_THEME_LABEL)
             if cur == target_label:
@@ -179,15 +194,6 @@ def main():
             ev(client, "window.__jfClick('theme')")
             time.sleep(0.35)
         return ev(client, JS_THEME_LABEL) == target_label
-
-    def click_mode_until(target_label, max_clicks=2):
-        for _ in range(max_clicks):
-            cur = ev(client, JS_MODE_LABEL)
-            if cur == target_label:
-                return True
-            ev(client, "window.__jfClick('mode')")
-            time.sleep(0.4)
-        return ev(client, JS_MODE_LABEL) == target_label
 
     try:
         # ---------- A) 接管视图：浅色 ----------
@@ -201,33 +207,22 @@ def main():
         client.wait_for("window.__jfRoot && !!window.__jfRoot() && window.__jfRoot().querySelectorAll('.jf-row').length > 5",
                         timeout=15.0)
         log("接管(shadow): %s" % taken)
-        # 若主题不是「浅色」，先切到浅色
-        click_theme_until('浅色')
+        # 接管视图默认 auto 档位：模拟系统浅色即得浅色
+        set_system_theme('light')
         time.sleep(0.3)
         client.screenshot(str(shots_dir / "shot-light.png"))
         results.append(("shot-light.png", "接管视图·浅色·全展开"))
 
         # ---------- B) 深色（全局） ----------
         log("\n=== B) 深色主题 ===")
-        click_theme_until('深色')
+        set_system_theme('dark')
         time.sleep(0.6)
         client.screenshot(str(shots_dir / "shot-dark.png"))
         results.append(("shot-dark.png", "接管视图·深色"))
 
-        # ---------- C) 工具栏特写（保留转义高亮） ----------
-        log("\n=== C) 工具栏开关态 ===")
-        click_theme_until('浅色')
-        # 读取保留转义开关状态，仅在关闭时点击开启，保证截图里是高亮态
-        JS_ESC_ON = "(function(){var b=window.__jfButtons();for(var i=0;i<b.length;i++){if(b[i].textContent.indexOf('保留转义')>=0)return {cls:b[i].className,t:b[i].title};}return null;})()"
-        st0 = ev(client, JS_ESC_ON)
-        log("保留转义点击前: %s" % json.dumps(st0, ensure_ascii=False))
-        if not (st0 and 'jf-btn-on' in (st0.get('cls') or '')):
-            r_esc = ev(client, "window.__jfClick('escape')")
-            st1 = ev(client, JS_ESC_ON)
-            log("保留转义点击: %s -> %s" % (r_esc, json.dumps(st1, ensure_ascii=False)))
-            time.sleep(0.5)
-        else:
-            log("保留转义已开启")
+        # ---------- C) 工具栏特写 ----------
+        log("\n=== C) 工具栏特写 ===")
+        set_system_theme('light')
         # 工具栏特写：只截顶部 220px
         client.send("Emulation.setDeviceMetricsOverride",
                     {"width": 1280, "height": 220, "deviceScaleFactor": 2, "mobile": False})
@@ -235,17 +230,10 @@ def main():
         client.screenshot(str(shots_dir / "shot-toolbar.png"))
         client.send("Emulation.setDeviceMetricsOverride",
                     {"width": 1280, "height": 800, "deviceScaleFactor": 1, "mobile": False})
-        results.append(("shot-toolbar.png", "工具栏·5按钮+保留转义高亮"))
+        results.append(("shot-toolbar.png", "工具栏特写"))
 
-        # ---------- D) 压缩 ----------
-        log("\n=== D) 压缩模式 ===")
-        click_mode_until('压缩')
-        time.sleep(0.6)
-        client.screenshot(str(shots_dir / "shot-compact.png"))
-        results.append(("shot-compact.png", "压缩模式·单行"))
-
-        # ---------- E) 编辑页（浅色，格式化完成） ----------
-        log("\n=== E) 编辑页 ===")
+        # ---------- D) 编辑页（浅色，格式化完成） ----------
+        log("\n=== D) 编辑页 ===")
         client.navigate("chrome-extension://%s/src/editor/editor.html" % ext_id, timeout=30.0)
         client.wait_for("document.readyState === 'complete' && !!document.getElementById('input')",
                         timeout=15.0)
@@ -276,12 +264,18 @@ def main():
         client.screenshot(str(docs_dir / "editor-dark.png"))
         results.append(("editor-dark.png", "编辑页·全局深色"))
 
-        # ---------- G) 编辑页·压缩（深色下更能看清单行效果） ----------
-        log("\n=== G) 编辑页·压缩 ===")
-        click_mode_until('压缩')
-        time.sleep(0.5)
-        client.screenshot(str(docs_dir / "editor-compact.png"))
-        results.append(("editor-compact.png", "编辑页·压缩·单行"))
+        # ---------- G) 编辑页·顶栏与输入栏工具条特写 ----------
+        # （2026-10-19 新版：顶栏右上角「跟随系统」+ 输入栏「转义 / 去转义 / 压缩」）
+        log("\n=== G) 编辑页·工具条特写 ===")
+        click_theme_until('浅色')
+        # 矮视口只露出页面顶部：品牌栏 + 右栏面板头，正好是两组工具条
+        client.send("Emulation.setDeviceMetricsOverride",
+                    {"width": 1280, "height": 300, "deviceScaleFactor": 2, "mobile": False})
+        time.sleep(0.4)
+        client.screenshot(str(docs_dir / "editor-toolbar.png"))
+        client.send("Emulation.setDeviceMetricsOverride",
+                    {"width": 1280, "height": 800, "deviceScaleFactor": 1, "mobile": False})
+        results.append(("editor-toolbar.png", "编辑页·顶栏跟随系统 + 输入栏转换钮"))
 
         # ---------- H) 编辑页·空状态 ----------
         log("\n=== H) 编辑页·空状态 ===")

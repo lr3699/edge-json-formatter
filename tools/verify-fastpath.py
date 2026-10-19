@@ -4,11 +4,13 @@
 verify-fastpath.py —— 大 JSON「原生解析 + 惰性树」快路径的端到端验证（真实浏览器）。
 
 验证点：
+  0) 切到树视图：≥600KB 自动走全文视图，先点「树视图」按钮再验树上行为；
   1) 同步段耗时（解析 + 首屏建行）——用户感知的「卡」；
   2) 行号连续无断档、哨兵正常、总行数受闸门控制；
-  3) 「加载更多」可推进，且推进后行号仍连续；
-  4) 压缩/美化切换（纯 CSS，不重建 DOM）与输出文本正确性；
-  5) 复制出来的输出与原生序列化逐字节一致（compact / pretty 两条）；
+  3) 折叠 → 再展开：行表先减后完全还原（扁平行表架构；哨兵/「加载更多」
+     随闸门续建一起退役，滚动连续性见 verify-virtual-tree.py）；
+  4) 输出模式恒为美化（「压缩 / 美化」切换钮已按功能精简下线）；
+  5) 复制出来的输出与原生美化序列化逐字节一致；
   6) 渲染出来的值文本与源码原文一致（核对 raw 还原）。
 
 用法：先起本地服务（repo 根，端口 18546），浏览器开 9222 调试端口，然后
@@ -73,6 +75,54 @@ def main():
         ev('window.__EDGE_JSON_FORMATTER__.setEditorText(window.__B__)')   # 预热
         time.sleep(4)
 
+        # ≥600KB 的文档会自动走全文视图（bigview/CodeMirror），树上什么都没有 ——
+        # 本测试验的是「原生快路径 + 惰性树 + 行号连续性」，所以先点全文工具条的
+        # 「树视图」按钮把当前文档切回树视图（setBigMode(false)，与用户手动
+        # 切换走同一条路；bigMode 是粘性的，后面重复 setEditorText 也留在树上）。
+        print('\n[0] 切到树视图并全部展开（大文档默认走全文视图 + 只展开 3 层）')
+        print('    ' + str(ev("""(function(){
+          var btns=[].slice.call(document.querySelectorAll('#bigToolbar .jf-btn'));
+          var tv=btns.filter(function(b){return b.textContent.trim()==='树视图';})[0];
+          if(!tv) return JSON.stringify({错误:'找不到树视图按钮',
+                                         按钮:btns.map(function(b){return b.textContent.trim();})});
+          tv.click();
+          return JSON.stringify({已点击:true});
+        })()""")))
+        tree_rows = 0
+        for _ in range(80):                     # 最多等 20s 让树渲染出来
+            time.sleep(0.25)
+            tree_rows = ev("document.querySelectorAll('.jf-row').length")
+            if tree_rows:
+                break
+        print('    树视图 DOM 行数：%s' % tree_rows)
+        if not tree_rows:
+            print('    [失败] 树视图没渲染出来，后续断言全部失去意义')
+            return 4
+        # 行号默认关闭（settings.lineNumbers=false），不开行号就验不了连续性
+        ev("window.__EDGE_JSON_FORMATTER__.applyEditorSettings({lineNumbers:true})")
+        # 大文档（>5 万节点）默认只展开前 3 层，行表只有几十行，没有哨兵、
+        # 没有「加载更多」、也没有可折叠容器 —— 选「全部展开」把 36 万行
+        # 的完整行表建出来，后续的行号连续性 / 哨兵 / 折叠回归才验得了。
+        print('    ' + str(ev("""(function(){
+          var sel=document.querySelector('.jf-level');
+          if(!sel) return JSON.stringify({错误:'找不到层级下拉'});
+          sel.value='all';
+          sel.dispatchEvent(new Event('change',{bubbles:true}));
+          return JSON.stringify({已选择:'all'});
+        })()""")))
+        total = 0
+        for _ in range(120):                    # 最多等 30s 建完整行表
+            time.sleep(0.25)
+            total = ev("(document.querySelector('.jf-status')||{}).textContent"
+                       ".match(/([\\d,]+)\\s*行/)")
+            total = int(total[1].replace(',', '')) if total else 0
+            if total > 100000:
+                break
+        print('    全部展开后行表长度：%s' % total)
+        if total <= 100000:
+            print('    [失败] 行表没建起来（%s），后续断言失去意义' % total)
+            return 4
+
         print('\n[1] 同步段（解析 + 首屏建行）')
         for i in (1, 2):
             r = ev('(function(){var t=performance.now();'
@@ -83,121 +133,63 @@ def main():
         print('\n[2] 行号连续性（稳定后）')
         time.sleep(2.5)
         print('    ' + str(ev("""(function(){
-          var rows=document.querySelectorAll('.jf-row'), prev=0, bad=0, cnt=0, blank=0;
+          var rows=document.querySelectorAll('.jf-row'), prev=0, bad=0, cnt=0;
           for(var i=0;i<rows.length;i++){
             var g=rows[i].querySelector('.jf-no'); if(!g) continue;
-            if(g.classList.contains('jf-no-more')){ blank++; continue; }
             var v=parseInt(g.textContent,10);
             if(!isNaN(v)){ cnt++; if(v!==prev+1) bad++; prev=v; }
           }
           return JSON.stringify({行数:rows.length, 已编号:cnt, 编号断档:bad,
-                                 哨兵:blank, 最后行号:prev,
+                                 最后行号:prev,
                                  DOM节点:document.getElementsByTagName('*').length});
         })()""")))
 
-        print('\n[3] 加载更多')
-        print('    ' + str(ev("""(function(){
-          var s=[].slice.call(document.querySelectorAll('.jf-summary'))
-                  .filter(function(x){return x.textContent.indexOf('\u8fd8\u6709')===0;})[0];
-          if(!s) return JSON.stringify({跳过:'没有哨兵'});
-          var before=document.querySelectorAll('.jf-row').length;
-          var t=performance.now(); s.click();
-          return JSON.stringify({点击耗时ms:+(performance.now()-t).toFixed(1), 点击前行数:before});
-        })()""")))
-        time.sleep(1.5)
-        print('    ' + str(ev("""(function(){
-          var rows=document.querySelectorAll('.jf-row'), prev=0, bad=0, cnt=0;
-          for(var i=0;i<rows.length;i++){
-            var g=rows[i].querySelector('.jf-no');
-            if(!g || g.classList.contains('jf-no-more')) continue;
-            var v=parseInt(g.textContent,10);
-            if(!isNaN(v)){ cnt++; if(v!==prev+1) bad++; prev=v; }
-          }
-          return JSON.stringify({行数:rows.length, 已编号:cnt, 编号断档:bad, 最后行号:prev});
-        })()""")))
+        # [3] 哨兵 / 「加载更多」：老架构（闸门续建 + 嵌套 .jf-children DOM）
+        # 的用例，虚拟化 + 惰性树重写后哨兵行已不存在 —— 滚动连续性与折叠
+        # 回归由 verify-virtual-tree.py 第 2、3 节覆盖，这里只保留快路径
+        # 视角下最有价值的一条：折叠让行表变短、再展开完全还原。
 
-        print('\n[3b] 折叠再展开：子元素不得重复追加（回归用例）')
+        print('\n[3b] 折叠 → 再展开：行表先减后完全还原（扁平行表架构）')
         print('    ' + str(ev("""(function(){
-          var toggles=[].slice.call(document.querySelectorAll('.jf-toggle'));
-          var t=null, kids=null;
-          for(var i=0;i<toggles.length;i++){
-            var k=toggles[i].closest('.jf-row').nextElementSibling;
-            if(k && k.classList.contains('jf-children') &&
-               k.querySelectorAll('.jf-row').length>=3){ t=toggles[i]; kids=k; break; }
+          function rows(){
+            var m=(document.querySelector('.jf-status').textContent.match(/([\\d,]+)\\s*行/)||[])[1];
+            return m?parseInt(m.replace(/,/g,''),10):-1;
           }
+          var t=document.querySelector('.jf-window .jf-toggle');
           if(!t) return JSON.stringify({跳过:'找不到可折叠容器'});
-          var n1=kids.querySelectorAll('.jf-row').length;
-          t.click();                       // 折叠
-          t.click();                       // 再展开
-          var n2=kids.querySelectorAll('.jf-row').length;
-          t.click(); t.click();            // 第二轮
-          var n3=kids.querySelectorAll('.jf-row').length;
-          // 行号也要保持连续
-          var rows=kids.querySelectorAll('.jf-row'), prev=0, bad=0;
-          for(var i=0;i<rows.length;i++){
-            var g=rows[i].querySelector('.jf-no');
-            if(!g || g.classList.contains('jf-no-more')) continue;
-            var v=parseInt(g.textContent,10);
-            if(!isNaN(v)){ if(v!==prev+1) bad++; prev=v; }
-          }
-          return JSON.stringify({首轮:n1, 一轮后:n2, 两轮后:n3,
-                                 重复追加:(n2>n1||n3>n2), 行号断档:bad});
+          var n0=rows();
+          t.click();                                    // 折叠第一个容器
+          var n1=rows();
+          var t2=document.querySelector('.jf-window .jf-toggle');
+          if(t2) t2.click();                            // 再展开（同一行还在窗口里）
+          var n2=rows();
+          // 窗口内行号无重复（扁平行表下重复行号=行表重建 bug）
+          var rs=[].slice.call(document.querySelectorAll('.jf-window .jf-row'));
+          var seen={},dup=0;
+          rs.forEach(function(r){var k=r.getAttribute('data-i');
+            if(seen[k])dup++; seen[k]=1;});
+          return JSON.stringify({折叠前:n0, 折叠后:n1, 再展开:n2,
+                                 折叠有效:n1<n0, 完全还原:n2===n0, 窗口重复行:dup});
         })()""")))
         time.sleep(1.2)
 
-        print('\n[3c] 后台续建未完成时就折叠/展开（flushFill 移除后的保护用例）')
+        print('\n[4] 输出模式恒为美化（「压缩 / 美化」按钮已下线）')
         print('    ' + str(ev("""(function(){
-          window.__EDGE_JSON_FORMATTER__.setEditorText(window.__B__);
-          // 此刻分帧续建还没开始跑（setTimeout(0)），立即连点折叠/展开
-          var toggles=[].slice.call(document.querySelectorAll('.jf-toggle'));
-          var t=null, kids=null;
-          for(var i=0;i<toggles.length;i++){
-            var k=toggles[i].closest('.jf-row').nextElementSibling;
-            if(k && k.classList.contains('jf-children') &&
-               k.querySelectorAll('.jf-row').length>=3){ t=toggles[i]; kids=k; break; }
-          }
-          if(!t) return JSON.stringify({跳过:'找不到可折叠容器'});
-          var n0=kids.querySelectorAll('.jf-row').length;
-          t.click(); t.click(); t.click(); t.click();   // 折叠/展开两轮
-          var n1=kids.querySelectorAll('.jf-row').length;
-          return JSON.stringify({续建中行数:n0, 连点后行数:n1, 重复追加:n1>n0});
-        })()""")))
-        time.sleep(4)
-        print('    ' + str(ev("""(function(){
-          var rows=document.querySelectorAll('.jf-row'), prev=0, bad=0, cnt=0, blank=0;
-          for(var i=0;i<rows.length;i++){
-            var g=rows[i].querySelector('.jf-no');
-            if(!g || g.classList.contains('jf-no-more')) continue;
-            var v=parseInt(g.textContent,10);
-            if(!isNaN(v)){ cnt++; if(v!==prev+1) bad++; prev=v; }
-            else if(g.textContent==='') blank++;
-          }
-          return JSON.stringify({稳定后行数:rows.length, 已编号:cnt,
-                                 编号断档:bad, 空行号:blank, 最后行号:prev});
-        })()""")))
-
-        print('\n[4] 压缩 / 美化切换（纯 CSS，DOM 不重建）')
-        print('    ' + str(ev("""(function(){
-          var btns=[].slice.call(document.querySelectorAll('.jf-btn'));
+          var btns=[].slice.call(document.querySelectorAll('.jf-toolbar .jf-btn'));
           var mode=btns.filter(function(b){var t=b.textContent.trim();
-            return t==='\u538b\u7f29'||t==='\u7f8e\u5316';})[0];
-          if(!mode) return 'ERR: 未找到压缩/美化按钮';
-          var before=document.querySelectorAll('.jf-row').length;
-          var t=performance.now(); mode.click();
-          var t1=performance.now()-t;
-          var after=document.querySelectorAll('.jf-row').length;
-          return JSON.stringify({按钮文案:mode.textContent.trim(),
-                                 切换耗时ms:+t1.toFixed(1),
-                                 行数前:before, 行数后:after, 行数不变:before===after,
-                                 body类:document.querySelector('.jf-body').className});
+            return t==='压缩'||t==='美化';})[0];
+          var rows=document.querySelectorAll('.jf-row').length;
+          var body=document.querySelector('.jf-body');
+          var compact=body?body.classList.contains('jf-compact'):null;
+          var ctext=document.querySelector('.jf-ctext');
+          return JSON.stringify({存在压缩美化按钮:!!mode, 压缩态:compact,
+                                 紧凑文本:!!ctext, 树行数:rows, 行数正常:rows>0});
         })()""")))
 
-        print('\n[5] 复制输出 vs 原生序列化')
+        print('\n[5] 复制输出 vs 原生序列化（美化）')
         out = ev("""(function(){
           var btns=[].slice.call(document.querySelectorAll('.jf-btn'));
-          var mode=btns.filter(function(b){var t=b.textContent.trim();
-            return t==='\u538b\u7f29'||t==='\u7f8e\u5316';})[0];
-          var copy=btns.filter(function(b){return b.textContent.indexOf('\u590d\u5236')>=0;})[0];
+          var copy=btns.filter(function(b){return b.textContent.indexOf('复制')>=0;})[0];
           if(!copy) return 'ERR: 未找到复制按钮';
           var nat=JSON.parse(window.__B__);
           var res={};
@@ -206,21 +198,12 @@ def main():
             copy.click();
             return window.__cap;
           }
-          // 当前模式（应该是压缩）
-          var compactText=grab();
-          var compactRef=JSON.stringify(nat);
-          res.compact = {实际:window.__hash(String(compactText)),
-                         期望:window.__hash(compactRef),
-                         一致:String(compactText)===compactRef};
-          res.compactPreview=String(compactText).slice(0,60);
-          mode.click();                         // 切回美化
           var prettyText=grab();
           var prettyRef=JSON.stringify(nat,null,'  ');
           res.pretty = {实际:window.__hash(String(prettyText)),
                         期望:window.__hash(prettyRef),
                         一致:String(prettyText)===prettyRef};
           res.prettyPreview=String(prettyText).slice(0,60);
-          res.模式按钮文案=mode.textContent.trim();
           return JSON.stringify(res);
         })()""")
         print('    ' + str(out))

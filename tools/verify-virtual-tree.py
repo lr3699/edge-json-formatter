@@ -7,6 +7,8 @@ verify-virtual-tree.py —— 验收「树视图虚拟化」（P1）。
 路径，不套扩展/编辑器外壳，所以测出来的就是渲染本身的行为。
 
 断言（大文档 22MB 为主线）：
+  0. 首屏后显式「全部展开」——大文档默认只展开前 3 层（1.1.11 体积自适应），
+     行表只有几十行；本测试要 36 万的完整行表，故钉住全展开再往下验
   1. 行表长度 = 文档行数（36 万），但 DOM 里始终只有几十行 → 虚拟化成立
   2. spacer 高度 = 上下留白 + 行数 × 行高，且与 body.scrollHeight 一致
   3. 滚到任意位置：DOM 行数不变，窗口首行下标跟着滚动位移走，滚动条到底能到文末
@@ -14,11 +16,12 @@ verify-virtual-tree.py —— 验收「树视图虚拟化」（P1）。
   5. 折叠 → 展开一次：行表长度先减后**完全还原**（老版本会翻倍，这是回归点），
      spacer 跟着变，DOM 行数不变
   6. 超长值单行截断（行内 512 字符 + 省略号），全文进 title
-  7. 「压缩」视图：切成紧凑文本、切回来行表不变
+  7. 输出模式恒为美化（「压缩 / 美化」切换钮已按功能精简下线）；工具条按钮
+     只剩复制 / 下载（「保留转义」「主题」两枚循环钮同步下线）
   8. 跳行 revealRow(i)：任意行都能滚进窗口，且 DOM 行数不变（虚拟化后只有
      viewer 能把某一行「拿出来」，外部 querySelector 找不到不在窗口里的行）
-  9. 「复制 / 下载」拿到的输出是**完整全文** —— 压缩视图只铺前 2MB 属屏幕策略，
-     绝不能被当成输出上限（用独立算出的紧凑文本长度逐字符比对）
+  9. 「复制 / 下载」拿到的输出是**完整全文** —— 视口只铺几十行属显示策略，
+     绝不能被当成输出上限（输出解析回来必须与原文等价）
  10. 小文档：行表长度 = 美化输出的行数；跨层级缩进拉开、行号钉在同一列
  11. 全程无 JS 报错
 
@@ -120,6 +123,12 @@ def main(argv=None):
         url = ("http://127.0.0.1:%d/tools/fixtures/vtree.html?src=/tools/fixtures/big-20mb.json&ln=1"
                % port)
         c.navigate(url, timeout=60.0)
+        # rAF 只在前台标签页触发：后台标签页里 scrollTo 的 Promise 永不落定，
+        # 整个第 2 节会干等到超时。把页面推到前台再验。
+        try:
+            c.send("Page.bringToFront")
+        except CDPError:
+            pass
         ok = c.wait_for("!!window.__vt && window.__vt.probe().rows > 0", timeout=60.0)
         if not ok:
             print("页面没就绪或没有行")
@@ -131,6 +140,15 @@ def main(argv=None):
         print("\n--- 载入 %s（%.1f MB）---" % (BIG.name, (chars or 0) / 1048576))
         if ready:
             print("  首屏（解析 + 建行表 + 画窗口）：%sms" % ready.get("ms"))
+
+        # 大文档（>5 万节点）默认只展开前 3 层（1.1.11 的自适应，保毫秒级首屏），
+        # 行表因此只有几十行。本测试要的是「36 万行的完整行表 + 虚拟化」，
+        # 显式钉住「全部展开」——等价于用户在下拉里手选，levelPinned 后
+        # 后续 load_big() 也会沿用全展开。
+        all_rows = ev("window.__vt.expandAll()")
+        print("  全部展开后行表长度：%s" % all_rows)
+        check("全部展开：行表长度 = 文档行数（> 30 万）",
+              isinstance(all_rows, int) and all_rows > 300000, all_rows)
 
         def load_big():
             return ev("fetch('/tools/fixtures/big-20mb.json',{cache:'no-store'})"
@@ -223,22 +241,20 @@ def main(argv=None):
         check("title 里给出总字符数", tv and want_txt in tv["title"],
               "%s（期望含 %s）" % (tv and tv["title"][:40], want_txt))
 
-        # ---------------- 5) 压缩视图 ----------------
-        print("\n=== 5) 「压缩」视图切换 ===")
+        # ---------------- 5) 输出模式恒为美化 ----------------
+        print("\n=== 5) 输出模式恒为美化（「压缩 / 美化 / 保留转义 / 主题」按钮已下线） ===")
         load_big()
-        btns = ev("JSON.stringify(window.__vt.btnTexts())")
+        btns = json.loads(ev("JSON.stringify(window.__vt.btnTexts())"))
         print("  工具条按钮：%s" % btns)
-        ms = ev("""(function(){var t=performance.now(); window.__vt.clickBtn(2);
-                    return Math.round(performance.now()-t);})()""")
+        mode = ev("window.__vt.outMode()")
         cp = json.loads(ev("JSON.stringify(window.__vt.probe())"))
-        check("压缩视图渲染出紧凑文本", cp["ctextLen"] > 1000, "chars=%d" % cp["ctextLen"])
-        check("压缩视图里没有树行", cp["domRows"] == 0, cp["domRows"])
-        print("  切到压缩：%sms（含 22MB 紧凑序列化）" % ms)
-        ms2 = ev("""(function(){var t=performance.now(); window.__vt.clickBtn(2);
-                     return Math.round(performance.now()-t);})()""")
-        back = json.loads(ev("JSON.stringify(window.__vt.probe())"))
-        check("切回美化：行表长度与之前一致", back["rows"] > 300000, back["rows"])
-        print("  切回美化：%sms" % ms2)
+        check("工具条按钮只剩复制 / 下载",
+              btns == ["复制", "下载"], btns)
+        check("工具条里没有「压缩 / 美化」按钮",
+              "压缩" not in btns and "美化" not in btns, btns)
+        check("输出模式恒为 pretty", mode == "pretty", mode)
+        check("没有紧凑文本节点", cp["ctextLen"] == -1, cp["ctextLen"])
+        check("树视图照常渲染", cp["rows"] > 300000, cp["rows"])
 
         # ---------------- 6) 跳行 + 全文输出 ----------------
         print("\n=== 6) 跳行（revealRow）与「复制 / 下载」输出完整全文 ===")
@@ -251,27 +267,20 @@ def main(argv=None):
                   pr["firstIdx"] <= target <= pr["lastIdx"],
                   "窗口 [%d, %d]" % (pr["firstIdx"], pr["lastIdx"]))
             check("revealRow(%d)：DOM 行数仍受控" % target, pr["domRows"] <= 120, pr["domRows"])
-        # 压缩视图只把前 2MB 铺到屏幕上（一整行几 MB 的文本连 shaping 都会假死），
-        # 但「复制 / 下载」拿的是 outputText()，必须是**完整**全文 —— 这是虚拟化
-        # 最容易踩的坑：把「显示策略」误当成「输出上限」，静默截断用户的文档。
-        COMPACT_MAX = 2 * 1024 * 1024
-        ev("window.__vt.clickBtn(2)")                     # 切到压缩
-        mode = ev("window.__vt.outMode()")
-        cnow = json.loads(ev("JSON.stringify(window.__vt.probe())"))
-        clen = ev("window.__vt.outputLen()")
-        check("压缩视图确实切过去了", mode == "compact", mode)
-        check("屏幕上只铺前 2MB（显示策略，防 shaping 假死）",
-              0 < cnow["ctextLen"] < COMPACT_MAX + 4096, cnow["ctextLen"])
-        check("输出不止屏幕上那 2MB（没把显示上限当输出上限）",
-              clen and clen > COMPACT_MAX, "output=%s" % clen)
-        # 最强的一条：拿页面里独立算出的完整紧凑文本长度逐字符对齐。
-        # 阈值断言容易被「这份 fixture 缩进后就多大」带偏，等长比对不会。
-        truth = ev("fetch('/tools/fixtures/big-20mb.json',{cache:'no-store'})"
+        # 视口只铺几十行是**显示策略**，但「复制 / 下载」拿的是 outputText()，
+        # 必须是**完整**全文 —— 这是虚拟化最容易踩的坑：把「显示策略」误当成
+        # 「输出上限」，静默截断用户的文档。压缩入口下线后改验美化输出：
+        # 解析回来必须与原文完全等价，且长度远超视口容量。
+        equiv = ev("(function(){"
+                   "return fetch('/tools/fixtures/big-20mb.json',{cache:'no-store'})"
                    ".then(function(r){return r.text()})"
-                   ".then(function(t){return JSON.stringify(JSON.parse(t)).length;})")
-        check("「复制 / 下载」的输出 = 独立算出的完整全文长度",
-              clen == truth, "output=%s truth=%s" % (clen, truth))
-        ev("window.__vt.clickBtn(2)")                     # 切回美化
+                   ".then(function(t){return JSON.stringify(JSON.parse(window.__vt.outputText()))"
+                   "===JSON.stringify(JSON.parse(t));})"
+                   "})()")
+        clen = ev("window.__vt.outputLen()")
+        check("完整输出解析回来与原文等价", equiv is True, equiv)
+        check("输出长度远超视口容量（没把显示策略当输出上限）",
+              bool(clen) and clen > 4 * 1024 * 1024, "output=%s" % clen)
 
         print("\n=== 7) 小文档：行数 = 美化输出行数，缩进与行号对齐 ===")
         small = {
@@ -318,7 +327,7 @@ def main(argv=None):
         if fails:
             print("[失败] %d 项：%s" % (len(fails), "；".join(fails)))
             return 6
-        print("[通过] 虚拟化树视图：结构 / 滚动 / 折叠 / 截断 / 压缩 / 跳行 / 全文输出 / 小文档 全部达标")
+        print("[通过] 虚拟化树视图：结构 / 滚动 / 折叠 / 截断 / 输出恒美化 / 跳行 / 全文输出 / 小文档 全部达标")
         return 0
     except CDPError as exc:
         print("CDP 错误：%s" % exc)

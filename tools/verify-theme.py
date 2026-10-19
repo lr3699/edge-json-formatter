@@ -88,8 +88,13 @@ window.__th = {
       rows: document.querySelectorAll('.jf-row').length
     });
   },
-  /** 主题按钮上的当前档位文案（跟随系统 / 浅色 / 深色） */
+  /** 主题按钮上的当前档位文案（跟随系统 / 浅色 / 深色）。
+   *  2026-10-19 起主题入口统一为顶栏右上角那枚三档循环钮（跟随系统 →
+   *  浅色 → 深色），右侧树工具条 / 大文档工具条的循环钮已下线，
+   *  所以选择器优先找 #btnThemeAuto。 */
   themeLabel: function () {
+    var b = document.getElementById('btnThemeAuto');
+    if (b) return (b.textContent || '').trim() || null;
     var bs = document.querySelectorAll('#viewer .jf-btn, .jf-btn');
     for (var i = 0; i < bs.length; i++) {
       var t = (bs[i].textContent || '').trim();
@@ -99,6 +104,14 @@ window.__th = {
   },
   /** 点主题按钮，直到档位文案等于 target（最多 3 次，正好一圈） */
   cycleThemeTo: function (target) {
+    var b = document.getElementById('btnThemeAuto');
+    if (b) {
+      for (var k = 0; k < 4; k++) {
+        if ((b.textContent || '').trim() === target) return target + '/OK';
+        b.click();
+      }
+      return (b.textContent || '').trim() + '/FAIL';
+    }
     var bs = document.querySelectorAll('#viewer .jf-btn, .jf-btn');
     for (var i = 0; i < bs.length; i++) {
       var t = (bs[i].textContent || '').trim();

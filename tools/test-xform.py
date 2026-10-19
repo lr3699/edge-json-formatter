@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""验证输入面板「转换」菜单：功能正确性 + 大文本性能。"""
+"""验证输入面板转换按钮（转义 / 去转义 / 压缩）：功能正确性 + 大文本性能。
+
+2026-10-19 起按钮与功能一一对应：「中文⇄U」双向钮下线；「转义⇄还原」拆成
+「转义」「去转义」两枚独立按钮（方向不再自动识别）。
+"""
 import argparse
 import json
 import sys
@@ -21,10 +25,8 @@ def check(name, ok, detail=""):
 
 
 IDS = {
-    '中文转U': 'btnUniToggle',
-    'U转中文': 'btnUniToggle',
-    '转义': 'btnEscToggle',
-    '去除转义': 'btnEscToggle',
+    '转义': 'btnEscape',
+    '去转义': 'btnUnescape',
     '压缩': 'btnMinify',
 }
 
@@ -56,25 +58,6 @@ def run(url):
         )
         time.sleep(0.6)
 
-        # --- 中文转 Unicode ---
-        open_menu_and_click(c, "中文转U")
-        time.sleep(0.5)
-        v = c.evaluate(
-            "window.__EDGE_JSON_FORMATTER__.getEditorText ?"
-            " window.__EDGE_JSON_FORMATTER__.getEditorText() : ''"
-        ).get("value")
-        check("中文转Unicode", "\\u5317" in v and "\\u57ce" in v and "北" not in v,
-              get_msg(c))
-
-        # --- Unicode 转中文（应还原） ---
-        open_menu_and_click(c, "U转中文")
-        time.sleep(0.5)
-        v = c.evaluate(
-            "window.__EDGE_JSON_FORMATTER__.getEditorText ?"
-            " window.__EDGE_JSON_FORMATTER__.getEditorText() : ''"
-        ).get("value")
-        check("Unicode转中文还原", "北京" in v and "\\u" not in v, get_msg(c))
-
         # --- 转义 ---
         open_menu_and_click(c, "转义")
         time.sleep(0.5)
@@ -85,13 +68,13 @@ def run(url):
         check("转义", v.startswith('"') and '\\"' in v, get_msg(c))
 
         # --- 去除转义（应还原） ---
-        open_menu_and_click(c, "去除转义")
+        open_menu_and_click(c, "去转义")
         time.sleep(0.5)
         v = c.evaluate(
             "window.__EDGE_JSON_FORMATTER__.getEditorText ?"
             " window.__EDGE_JSON_FORMATTER__.getEditorText() : ''"
         ).get("value")
-        check("去除转义还原", v == sample, get_msg(c))
+        check("去转义还原", v == sample, get_msg(c))
 
         # --- 压缩（含大整数精度保留） ---
         pretty = json.dumps(
@@ -133,24 +116,14 @@ def run(url):
         check("压缩 4MB < 1s", (time.time() - t0) < 3.0, get_msg(c))
 
         t0 = time.time()
-        open_menu_and_click(c, "中文转U")
-        time.sleep(1.2)
-        check("中文转Unicode 4MB < 3s", (time.time() - t0) < 6.0, get_msg(c))
-
-        t0 = time.time()
-        open_menu_and_click(c, "U转中文")
-        time.sleep(1.2)
-        check("Unicode转中文 4MB < 3s", (time.time() - t0) < 6.0, get_msg(c))
-
-        t0 = time.time()
         open_menu_and_click(c, "转义")
         time.sleep(1.2)
         check("转义 4MB < 3s", (time.time() - t0) < 6.0, get_msg(c))
 
         t0 = time.time()
-        open_menu_and_click(c, "去除转义")
+        open_menu_and_click(c, "去转义")
         time.sleep(1.2)
-        check("去除转义 4MB < 3s", (time.time() - t0) < 6.0, get_msg(c))
+        check("去转义 4MB < 3s", (time.time() - t0) < 6.0, get_msg(c))
 
         print("\n结果：%d 通过，%d 失败" % (PASS, FAIL))
         return FAIL == 0
@@ -160,7 +133,7 @@ def run(url):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--url", default="http://127.0.0.1:18544/app.html")
+    ap.add_argument("--url", default="http://127.0.0.1:18544/site/app.html")
     args = ap.parse_args()
     ok = run(args.url)
     sys.exit(0 if ok else 1)

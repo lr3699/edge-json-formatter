@@ -7,6 +7,8 @@ verify-big-toolbar.py —— 大文档视图（CodeMirror）工具条验收。
 `#viewer` 一起被 hidden。所以「大 JSON 格式化后按钮全没了」。现在补了
 `#bigToolbar`（搜索 / 折叠全部 / 行号 / 折行 / 主题 | 复制 / 下载），这里把
 每个按钮真的点一遍，断言它确实生效 —— 只检查 DOM 存不存在是不够的。
+2026-10-19 起「美化 ⇄ 压缩」输出切换钮按功能精简下线，工具条不再有它，
+右栏输出恒为美化；要单行文本用左栏「压缩」按钮。
 
 前置：本地站点在跑（node tools/serve.js），Edge 带 --remote-debugging-port 启动。
 
@@ -99,6 +101,9 @@ PROBE = r"""
   out.inputVisible = !!(pi && !pi.hidden && pi.offsetWidth > 0);
   var sl = document.getElementById('soloLabel');
   out.soloLabel = sl ? sl.textContent : '';
+  // 顶栏右上角的三档主题循环钮（跟随系统 / 浅色 / 深色）
+  var tbtn = document.getElementById('btnThemeAuto');
+  out.topTheme = tbtn ? (tbtn.textContent || '').trim() : null;
   return JSON.stringify(out);
 })()
 """
@@ -141,16 +146,14 @@ def click(client, label):
     return json.loads(ev(client, CLICK % json.dumps(label)))
 
 
-# 主题按钮的文案是**当前档位**（跟随系统 / 浅色 / 深色），不是「主题」二字，
-# 所以只能按这三个名字去找它，不能想当然地 click("主题")。
+# 主题档位在顶栏右上角那枚三档循环钮上（2026-10-19 起右侧工具条入口已下线），
+# 文案是当前档位（跟随系统 / 浅色 / 深色），不是「主题」二字。
 THEME_LABELS = ("跟随系统", "浅色", "深色")
 
 
-def theme_label(buttons):
-    for b in buttons or []:
-        if b in THEME_LABELS:
-            return b
-    return None
+def theme_label(p):
+    """从 probe 结果里取当前主题档位（读顶栏按钮文案）。"""
+    return p.get("topTheme")
 
 
 def rows_from_msg(msg):
@@ -165,11 +168,13 @@ def rows_from_msg(msg):
 
 
 def click_theme(client):
-    for lb in THEME_LABELS:
-        r = click(client, lb)
-        if r.get("ok"):
-            return r
-    return {"ok": False, "why": "theme button not found"}
+    """点顶栏主题循环钮（前进一档：跟随系统 → 浅色 → 深色）。"""
+    return json.loads(ev(client, r"""(function () {
+      var b = document.getElementById('btnThemeAuto');
+      if (!b) return JSON.stringify({ ok: false, why: 'no btnThemeAuto' });
+      b.click();
+      return JSON.stringify({ ok: true, hit: (b.textContent || '').trim() });
+    })()"""))
 
 
 def main(argv=None):
@@ -218,8 +223,11 @@ def main(argv=None):
     p = probe(c)
     check("大文档视图已接管", p["cmHeight"] > 0, "cm 高 %s / 宿主高 %s" % (p["cmHeight"], p["viewHeight"]))
     check("工具条不是 hidden", not p["tbHidden"])
-    want = ["搜索", "折叠全部", "行号", "折行", "跟随系统", "美化", "复制", "下载"]
-    check("按钮齐全", p.get("buttons") == want, p.get("buttons"))
+    # 「树视图」是 1.1.11 加的（大文档手动切回树视图的入口）；
+    # 「美化 ⇄ 压缩」输出切换钮 2026-10-19 按功能精简下线，右栏输出恒为美化。
+    want = ["树视图", "搜索", "折叠全部", "行号", "折行", "复制", "下载"]
+    check("按钮齐全（主题走顶栏三档循环钮，无「美化 / 压缩」输出切换钮）",
+          p.get("buttons") == want, p.get("buttons"))
 
     print("\n--- 1b) 输入栏没被大文档自动收起（用户明确要求） ---")
     check("未进 is-solo", not p["solo"], "solo=%s" % p["solo"])
@@ -277,34 +285,24 @@ def main(argv=None):
     p10 = probe(c)
     check("下载有成功反馈", "已开始下载" in p10["msg"], p10["msg"])
 
-    print("\n--- 7b) 美化 ⇄ 压缩（大文档压缩会变成单行，这里同时量耗时） ---")
-    t0 = time.time()
-    click(c, "美化")
+    print("\n--- 7b) 输出恒为美化（「美化 / 压缩」按钮已下线） ---")
     pm = probe(c)
-    dt_ms = int((time.time() - t0) * 1000)
-    rows = rows_from_msg(pm["msg"])
-    check("切到压缩后按钮变「压缩」", "压缩" in pm["buttons"], pm["buttons"])
-    check("压缩后确实是单行", rows == 1, "rows=%s  msg=%r" % (rows, pm["msg"]))
-    check("切压缩耗时可接受（<5s）", dt_ms < 5000, "%d ms" % dt_ms)
-    check("压缩后复制仍取全文", pm["msg"].startswith("已复制") or True, "")
-
-    t1 = time.time()
-    click(c, "压缩")
-    pn = probe(c)
-    dt2 = int((time.time() - t1) * 1000)
-    rows2 = rows_from_msg(pn["msg"])
-    check("切回美化后按钮变「美化」", "美化" in pn["buttons"], pn["buttons"])
-    check("切回后行数恢复", rows2 > 1000, "rows=%s" % rows2)
-    check("切回耗时可接受（<5s）", dt2 < 5000, "%d ms" % dt2)
+    check("工具条里没有「美化」按钮", "美化" not in pm["buttons"], pm["buttons"])
+    check("工具条里没有「压缩」按钮", "压缩" not in pm["buttons"], pm["buttons"])
+    # 输出恒为美化 → 视口里看得到多行（被压成单行时 .cm-line 只有 1 个）
+    lines = ev(c, "document.querySelectorAll('#bigView .cm-line').length")
+    check("视口内渲染出多行文本（不是单行压缩）",
+          isinstance(lines, int) and lines > 3, "cm-line=%s" % lines)
+    check("大文档视图仍在（没被切走）", pm["cmHeight"] > 200, pm["cmHeight"])
 
     print("\n--- 8) 主题切换（三连点应走完 auto → light → dark 并回到原点） ---")
-    start = theme_label(probe(c)["buttons"])
+    start = theme_label(probe(c))
     seen = []
     for _ in range(3):
         r = click_theme(c)
         check("命中主题按钮", r.get("ok"), r.get("hit"))
         p_t = probe(c)
-        seen.append((theme_label(p_t["buttons"]), p_t["tbTheme"], p_t["tbBg"]))
+        seen.append((theme_label(p_t), p_t["tbTheme"], p_t["tbBg"]))
     order = [s[0] for s in seen]
     check("三连点回到起始档位", order[2] == start, "%s → %s" % (start, order))
     check("三档都出现过", set(order) == set(THEME_LABELS), order)
@@ -314,16 +312,16 @@ def main(argv=None):
         out = Path(__file__).resolve().parent.parent / "dist" / "shots"
         out.mkdir(parents=True, exist_ok=True)
         # 停在深色那一档再截图
-        while theme_label(probe(c)["buttons"]) != "深色":
+        while theme_label(probe(c)) != "深色":
             click_theme(c)
         c.screenshot(str(out / "bigtoolbar-dark.png"))
         print("  截图：" + str(out / "bigtoolbar-dark.png"))
     # 复位到「跟随系统」，免得把本机偏好改掉
     for _ in range(4):
-        if theme_label(probe(c)["buttons"]) == "跟随系统":
+        if theme_label(probe(c)) == "跟随系统":
             break
         click_theme(c)
-    check("已复位为跟随系统", theme_label(probe(c)["buttons"]) == "跟随系统")
+    check("已复位为跟随系统", theme_label(probe(c)) == "跟随系统")
 
     print("\n--- 9) 小文档回落树视图时，大工具条必须收起来 ---")
     ev(c, """(function(){

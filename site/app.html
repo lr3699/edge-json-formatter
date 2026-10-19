@@ -12,9 +12,9 @@
   <meta property="og:description" content="双栏 JSON 工作台：左栏粘贴原文、右栏实时预览，可折叠树、搜索、JSONPath 复制，纯本地运行。">
   <meta property="og:image" content="https://lr3699.github.io/json-formatter-pro/og-image.png">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="icon" href="favicon.png?v=07995436" type="image/png">
-  <link rel="stylesheet" href="assets/07995436/editor.css">
-  <link rel="stylesheet" href="app.css?v=07995436">
+  <link rel="icon" href="favicon.png?v=c0e4aae7" type="image/png">
+  <link rel="stylesheet" href="assets/c0e4aae7/editor.css">
+  <link rel="stylesheet" href="app.css?v=c0e4aae7">
 </head>
 <body>
   <div class="aurora" aria-hidden="true">
@@ -25,7 +25,7 @@
 
   <header class="topbar">
     <div class="brand">
-      <img class="brand-mark" src="favicon.png?v=07995436" alt="" width="32" height="32">
+      <img class="brand-mark" src="favicon.png?v=c0e4aae7" alt="" width="32" height="32">
       <span class="brand-text">
         <b>JSON Duo</b>
       </span>
@@ -42,6 +42,18 @@
         <em class="keys-sep">·</em>
         <kbd>F</kbd><i>全屏</i>
       </span>
+      <!-- 主题三档循环钮：跟随系统 → 浅色 → 深色。放在顶栏右上角（输入栏正上方），
+           是主题档位唯一的按钮入口（设置抽屉的下拉仍可作兜底）。
+           右侧树工具条 / 大文档工具条的循环钮已按「功能精简」下线。 -->
+      <button id="btnThemeAuto" class="btn btn-ghost" type="button"
+              aria-pressed="true" title="主题：跟随系统（点击切换）">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="2.5" y="4" width="19" height="12.5" rx="2"/>
+          <path d="M8.5 20.5h7M12 16.5v4"/>
+        </svg>
+        <span id="btnThemeAutoLabel">跟随系统</span>
+      </button>
       <button id="btnEdit" class="btn btn-ghost" type="button"
               aria-pressed="false" title="在右侧直接编辑格式化后的 JSON；也可以直接双击树里的键名或值就地改">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
@@ -96,24 +108,23 @@
           <span class="dot-i dot-in"></span>输入
         </span>
         <span class="panel-tools">
-          <button id="btnUniToggle" class="btn btn-sm" type="button"
-                  title="中文 ⇄ \uXXXX 自动识别方向：内容含 \u 转义则还原成中文，否则把中文转成 \uXXXX">
+          <button id="btnEscape" class="btn btn-sm" type="button"
+                  title="转义：把整段文本变成一个带引号的 JSON 字符串（引号变 &quot;、换行变 \n）">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="2" y1="12" x2="22" y2="12"/>
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+              <path d="M8 17.5c-1.5-1.1-2.2-2.5-2.2-4.3 0-1.9 1-3.4 2.6-4.4"/>
+              <path d="M16 17.5c1.5-1.1 2.2-2.5 2.2-4.3 0-1.9-1-3.4-2.6-4.4"/>
             </svg>
-            <span>中文⇄U</span>
+            <span>转义</span>
           </button>
-          <button id="btnEscToggle" class="btn btn-sm" type="button"
-                  title="转义 ⇄ 还原 自动识别方向：整段是带引号的转义字符串则还原，否则转义成 JSON 字符串">
+          <button id="btnUnescape" class="btn btn-sm" type="button"
+                  title="去转义：剥掉一层 JSON 字符串包装，还原成原始文本">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <polyline points="16 18 22 12 16 6"/>
-              <polyline points="8 6 2 12 8 18"/>
+              <path d="M8 17.5c-1.5-1.1-2.2-2.5-2.2-4.3 0-1.9 1-3.4 2.6-4.4"/>
+              <polyline points="14 8.5 19 12 14 15.5"/>
             </svg>
-            <span>转义⇄还原</span>
+            <span>去转义</span>
           </button>
           <button id="btnMinify" class="btn btn-sm" type="button"
                   title="压缩：去掉多余空白与注释（单遍扫描，大整数精度不丢）">
@@ -215,14 +226,14 @@
     </section>
   </aside>
 
-  <script src="assets/07995436/codemirror.bundle.js"></script>
-  <script src="assets/07995436/defaults.js"></script>
-  <script src="assets/web-storage.js?v=07995436"></script>
-  <script src="assets/07995436/json-parser.js"></script>
-  <script src="assets/07995436/rowmodel.js"></script>
-  <script src="assets/07995436/viewer.js"></script>
-  <script src="assets/07995436/bigview.js"></script>
-  <script src="assets/07995436/editor.js"></script>
-  <script src="assets/web-settings.js?v=07995436"></script>
+  <script src="assets/c0e4aae7/codemirror.bundle.js"></script>
+  <script src="assets/c0e4aae7/defaults.js"></script>
+  <script src="assets/web-storage.js?v=c0e4aae7"></script>
+  <script src="assets/c0e4aae7/json-parser.js"></script>
+  <script src="assets/c0e4aae7/rowmodel.js"></script>
+  <script src="assets/c0e4aae7/viewer.js"></script>
+  <script src="assets/c0e4aae7/bigview.js"></script>
+  <script src="assets/c0e4aae7/editor.js"></script>
+  <script src="assets/web-settings.js?v=c0e4aae7"></script>
 </body>
 </html>

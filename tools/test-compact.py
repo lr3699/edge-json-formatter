@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-test-compact.py —— 验证「压缩 / 美化」切换在虚拟化渲染下依然快且正确。
+test-compact.py —— 「压缩 / 美化」输出切换下线后的回归（2026-10-19 功能精简）。
 
-历史沿革（三次实现，读旧注释时别被误导）：
-  ① 最早：压缩走 renderCompactNode 全树重建 DOM，几十万节点一次性插入 → 卡死。
-  ② 之后：纯 CSS class 切换（body.jf-compact），DOM 不动，靠 CSS 把嵌套塌缩成一行。
-  ③ 现在（树视图虚拟化之后）：CSS 那条路走不通了 —— 扁平行表里只挂着视口那几十行，
-     塌缩出来的只会是文档的一小段，语义上已经不成立。改成 render() 重新渲染成
-     一段紧凑文本（.jf-ctext）；body.jf-compact 保留，但只作「当前是压缩视图」
-     的状态标记，CSS 不再依赖它。
+原职能：验证右侧工具条「美化 ⇄ 压缩」切换在虚拟化渲染下依然快且正确。
+现职能：该按钮已按「功能精简」移除，右栏输出恒为美化（缩进展开）；要单行文本
+请用左栏「压缩」按钮（对源文本做压缩，回灌后重新排版）。本测试守住新契约：
 
-所以本测试现在量的是：
-  1) 载入大 JSON 后树视图的行表长度 —— 虚拟化下 DOM 行数恒定，不再是「渐进补齐」，
-     所以行数一律从状态栏读（.jf-status 里的「N 行」），它等于行表长度
-  2) 点「压缩」的耗时（含一次完整紧凑序列化；走原生路径，几万节点几十毫秒）
-  3) 压缩态：渲染出 .jf-ctext、树行为 0、文本解析回来与原文完全等价
-  4) 切回美化：行表长度完全还原（一条都不能少）—— 这是「压缩视图别把行表弄丢」的回归点
+  1) 右侧工具条**不存在**「压缩 / 美化」按钮（入口不许悄悄回来）
+  2) body 无 jf-compact 状态类、页面上没有 .jf-ctext 紧凑文本节点
+  3) 树视图照常渲染：行表长度可读、DOM 行数受虚拟化控制
+  4) 左栏「压缩」按钮仍可用：点完源文本去掉所有换行（能力没被一起删掉），
+     且压缩后树视图依然渲染得出来
+
+内部机制备注：viewer.js 的 outMode / renderCompactText() 代码保留，
+state.outMode 恒为 'pretty'，只是不再有 UI 入口。
 
 用法：python tools/test-compact.py [--url ...] [--port 9222] [--nodes 20000]
 """
@@ -39,13 +37,16 @@ STATUS_ROWS = (
     "return m?parseInt(m[1].replace(/,/g,''),10):null;})()"
 )
 
-# 在工具栏里找文案为 label 的按钮并点击。必须限定 .jf-toolbar：
-# 输入面板上也有个「压缩」按钮（那是对源文本做压缩，不是切输出排版），不限定会点错。
-CLICK_TOOLBAR = (
+# 右侧树视图工具条里文案为 label 的按钮（限定 .jf-toolbar：输入面板上也有个
+# 「压缩」按钮，那是对源文本做压缩，不是切输出排版，不限定会点错/找错）。
+TOOLBAR_BTN = (
     "(function(){var bs=[].slice.call(document.querySelectorAll('.jf-toolbar button'));"
     "var b=bs.filter(function(x){return x.textContent.trim()===%s;})[0];"
-    "if(!b)return false;b.click();return true;})()"
+    "return b?true:false;})()"
 )
+
+# 左栏「压缩」按钮（输入面板那个，id 选择器不会和右侧工具条搞混）
+CLICK_MINIFY = "document.getElementById('btnMinify').click()"
 
 
 def gen_json(n_nodes):
@@ -69,13 +70,17 @@ def main(argv=None):
         pass
 
     p = argparse.ArgumentParser()
-    p.add_argument("--url", default="http://127.0.0.1:18544/app.html")
+    p.add_argument("--url", default="http://127.0.0.1:18544/site/app.html")
     p.add_argument("--port", type=int, default=9222)
-    p.add_argument("--nodes", type=int, default=20000)
+    # 注意：≥600KB 的文档会自动走全文视图（bigview），树上什么都没有 ——
+    # 本测试验的是树视图契约，夹具必须留在树视图里。2000 项 ≈ 460KB。
+    p.add_argument("--nodes", type=int, default=10000)
     args = p.parse_args(argv)
 
-    data = json.dumps(gen_json(args.nodes))
-    print("生成 JSON：%s 字符" % len(data), flush=True)
+    # 故意用缩进版：否则紧凑 JSON 本来就没有换行，「去掉所有换行」会空转成恒真
+    data = json.dumps(gen_json(args.nodes), indent=2)
+    print("生成 JSON：%s 字符（缩进版，%d 行）"
+          % (len(data), data.count("\n") + 1), flush=True)
 
     fails = []
 
@@ -101,6 +106,15 @@ def main(argv=None):
         print("  载入 + 首屏渲染：%.0f ms" % ((t1 - t0) * 1000), flush=True)
         time.sleep(0.4)
 
+        # 视图守卫：≥600KB 会自动切全文视图（bigview），树上什么都没有。
+        # 夹具超阈值时后面所有树视图断言都会变成假失败，先拦一道。
+        in_big = client.evaluate(
+            "(function(){return !!document.querySelector('.cm-editor') ||"
+            " !document.querySelector('.jf-body');})()"
+        ).get("value")
+        check("夹具留在树视图（未触达 600KB 全文视图阈值）", not in_big,
+              "len=%d，超阈值请减小 --nodes" % len(data))
+
         rows0 = client.evaluate(STATUS_ROWS).get("value")
         dom0 = client.evaluate("document.querySelectorAll('.jf-row').length").get("value")
         print("  行表长度（状态栏）：%s，DOM 行数：%s" % (rows0, dom0), flush=True)
@@ -108,60 +122,33 @@ def main(argv=None):
         check("虚拟化：DOM 行数远小于行表长度", isinstance(dom0, int) and dom0 < 200,
               "dom=%s rows=%s" % (dom0, rows0))
 
-        # 点「美化」按钮 → 切到压缩（工具栏按钮文案是「当前状态」语义：
-        # pretty 时显示「美化」，compact 时显示「压缩」）
-        t0 = time.time()
-        clicked = client.evaluate(CLICK_TOOLBAR % json.dumps("美化")).get("value")
-        t1 = time.time()
-        compact_ms = (t1 - t0) * 1000
-        time.sleep(0.3)
+        # --- 新契约一：右侧工具条不再有「压缩 / 美化」按钮 ---
+        has_mode = client.evaluate(TOOLBAR_BTN % json.dumps("美化")).get("value") or \
+            client.evaluate(TOOLBAR_BTN % json.dumps("压缩")).get("value")
+        check("工具条没有「美化」按钮", not has_mode)
+
+        # --- 新契约二：输出恒为美化（无紧凑态） ---
         is_compact = client.evaluate(
-            "document.querySelector('.jf-body').classList.contains('jf-compact')"
+            "(function(){var b=document.querySelector('.jf-body');"
+            "return b?b.classList.contains('jf-compact'):null;})()"
         ).get("value")
-        ctext_len = client.evaluate(
+        ctext = client.evaluate(
             "(function(){var c=document.querySelector('.jf-ctext');"
             "return c?c.textContent.length:-1;})()"
         ).get("value")
-        dom_compact = client.evaluate("document.querySelectorAll('.jf-row').length").get("value")
-        # 压缩文本的正确性：解析回来必须和原对象完全等价（比字符串比对稳，
-        # 不受两侧各自序列化细节影响，但仍能证明「捏出来的是一份合法且等价的 JSON」）
-        # 注意末尾的 () —— 漏了它整个表达式会求值成一个函数对象（CDP 只能拿到 {}），
-        # 断言就会「静默地」永远是 false。
-        same = client.evaluate(
-            "(function(){var c=document.querySelector('.jf-ctext');"
-            "if(!c)return false;"
-            "try{return JSON.stringify(JSON.parse(c.textContent))===JSON.stringify(JSON.parse(%s));}"
-            "catch(e){return false;}})()"
-            % json.dumps(data)
-        ).get("value")
-        print("  切到压缩：%.0f ms（ctext=%s 字符，DOM 树行 %s，compact class=%s）"
-              % (compact_ms, ctext_len, dom_compact, is_compact), flush=True)
+        check("body 无 jf-compact 状态类", not is_compact)
+        check("没有 .jf-ctext 紧凑文本节点", ctext == -1, ctext)
 
-        check("工具栏「美化」按钮可点", bool(clicked))
-        check("压缩切换 < 200ms", compact_ms < 200, "%.0fms" % compact_ms)
-        check("压缩态 class 生效", bool(is_compact))
-        check("压缩态渲染出紧凑文本", isinstance(ctext_len, int) and ctext_len > 1000, ctext_len)
-        check("压缩态没有树行", dom_compact == 0, dom_compact)
-        check("紧凑文本与原文等价", bool(same))
-
-        # 点「压缩」按钮 → 切回美化
-        t0 = time.time()
-        client.evaluate(CLICK_TOOLBAR % json.dumps("压缩"))
-        t1 = time.time()
-        pretty_ms = (t1 - t0) * 1000
-        time.sleep(0.4)
-        is_pretty = client.evaluate(
-            "!document.querySelector('.jf-body').classList.contains('jf-compact')"
-        ).get("value")
-        rows_back = client.evaluate(STATUS_ROWS).get("value")
-        print("  切回美化：%.0f ms（行表 %s -> %s，pretty=%s）"
-              % (pretty_ms, rows0, rows_back, is_pretty), flush=True)
-
-        check("美化切换 < 200ms", pretty_ms < 200, "%.0fms" % pretty_ms)
-        check("切回美化 class 移除", bool(is_pretty))
-        check("切回美化后行表一条不少", rows_back == rows0, "%s vs %s" % (rows0, rows_back))
-        check("切回美化后树行为窗口大小", 0 < client.evaluate(
-            "document.querySelectorAll('.jf-row').length").get("value") < 200)
+        # --- 新契约三：左栏「压缩」按钮仍然可用（能力没被一起删掉） ---
+        client.evaluate(CLICK_MINIFY)
+        time.sleep(0.6)
+        v = client.evaluate(
+            "window.__EDGE_JSON_FORMATTER__.getEditorText ?"
+            " window.__EDGE_JSON_FORMATTER__.getEditorText() : ''"
+        ).get("value") or ""
+        check("左栏压缩：源文本去掉所有换行", "\n" not in v, "len=%d" % len(v))
+        rows_after = client.evaluate(STATUS_ROWS).get("value")
+        check("压缩后树视图仍渲染", isinstance(rows_after, int) and rows_after > 0, rows_after)
 
         print("\n结果：%s" % ("全部通过" if not fails else "失败 -> " + ", ".join(fails)))
         return 0 if not fails else 1

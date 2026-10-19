@@ -3,6 +3,8 @@
 大 JSON 性能验证（真实夹具，测当前代码的绝对耗时，不搞 A/B）。
 
 夹具：tools/fixtures/big-menu.json（11.1 MB 真实菜单数据）
+注意：≥600KB 的文档自动走全文视图（bigview/CodeMirror），所以本脚本测的是
+全文视图下各操作的绝对耗时；树视图路径见 verify-fastpath.py / verify-virtual-tree.py。
 
 每一项都带 60 秒硬超时，超时即报「卡死」，从而判定优化是否生效。
 测完输出各操作的绝对耗时。这是收尾验证，不是探针。
@@ -77,7 +79,10 @@ def main():
           (function(){var t=performance.now();
            window.__EDGE_JSON_FORMATTER__.setEditorText(window.__BIG__);
            var ms=performance.now()-t;
-           return ms+'ms rows='+document.querySelectorAll('.jf-row').length;})()''')
+           // 视图判定看 hidden 属性：CodeMirror 是懒加载的，.cm-editor 要等
+           // 下一个任务才挂上，同步读会误判成树视图
+           var big=!document.getElementById('bigView').hidden;
+           return ms+'ms 视图='+(big?'全文':'树')+' rows='+document.querySelectorAll('.jf-row').length;})()''')
 
         print('\n[压缩]')
         op('压缩', '''
@@ -88,31 +93,29 @@ def main():
            NS.setEditorText(window.__BIG__);
            return ms+'ms 压缩后='+NS.getEditorText().length+'字符';})()''')
 
-        print('\n[转义]')
+        print('\n[转义 / 去转义]')
         op('转义', '''
           (function(){var NS=window.__EDGE_JSON_FORMATTER__;
            NS.setEditorText(window.__BIG__);
-           var t=performance.now(); document.getElementById('btnEscToggle').click();
+           var t=performance.now(); document.getElementById('btnEscape').click();
            var ms=performance.now()-t;
+           var out=NS.getEditorText().length;
            NS.setEditorText(window.__BIG__);
-           return ms+'ms 转义后='+NS.getEditorText().length+'字符';})()''')
-
-        print('\n[中文转 Unicode]')
-        op('中文转Unicode', '''
+           return ms+'ms 转义后='+out+'字符';})()''')
+        op('去转义', '''
           (function(){var NS=window.__EDGE_JSON_FORMATTER__;
            NS.setEditorText(window.__BIG__);
-           var t=performance.now(); document.getElementById('btnUniToggle').click();
+           document.getElementById('btnEscape').click();
+           NS.setEditorText(NS.getEditorText());
+           var t=performance.now(); document.getElementById('btnUnescape').click();
            var ms=performance.now()-t;
+           var back=NS.getEditorText();
            NS.setEditorText(window.__BIG__);
-           return ms+'ms';})()''')
+           return ms+'ms 还原后='+back.length+'字符';})()''')
 
-        print('\n[折叠 / 展开根节点]')
-        op('折叠根节点', '''
-          (function(){var t=document.querySelector('.jf-toggle');
-           var t0=performance.now(); t.click();
-           var ms=performance.now()-t0;
-           document.querySelector('.jf-toggle').click();
-           return ms+'ms';})()''')
+        # 「折叠根节点」原是树视图用例；11MB 文档自动走全文视图（CodeMirror），
+        # 树上没有 .jf-toggle。折叠性能由 verify-virtual-tree.py（22MB 全展开）
+        # 与 verify-fastpath.py [3b] 覆盖，这里不重复。
 
         print('\n全部通过 —— 无卡死项。')
     finally:

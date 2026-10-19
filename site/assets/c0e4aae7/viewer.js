@@ -394,7 +394,6 @@
     copy: ['M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1z',
       'M5 15V4a1 1 0 0 1 1-1h9'],
     download: ['M12 3.5v12', 'm7.5 11 4.5 4.5 4.5-4.5', 'M4.5 20.5h15'],
-    theme: ['M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z'],
     /* 铅笔：把结果切到可编辑模式 */
     edit: ['M4.5 19.5h4L20 8a2.12 2.12 0 0 0-3-3L5.5 16.5v3z',
       'm14.5 6.5 3 3']
@@ -538,9 +537,7 @@
       window.addEventListener('resize', function () { layout(); updateWindow(true); });
     }
 
-    var THEME_NAMES = { auto: '跟随系统', light: '浅色', dark: '深色' };
-    var THEME_ORDER = ['auto', 'light', 'dark'];
-    /** 工具栏控件引用，供 syncToolbar() 刷新文案与选中态 */
+    /** 工具栏控件引用（保留转义 / 主题两枚循环钮已下线，见 buildToolbar） */
     var tb = {};
 
     buildToolbar();
@@ -569,49 +566,25 @@
       return b;
     }
 
-    function setBtnLabel(btn, text) {
-      if (btn && btn.__jfLabel) btn.__jfLabel.textContent = text;
-    }
-
     function buildToolbar() {
       toolbar.textContent = '';
 
-      tb.escape = tbtn('保留转义', null, '', function () {
-        opts.keepEscape = !opts.keepEscape;
-        persist({ keepEscape: opts.keepEscape });
-        syncToolbar();
-        render();
-      }, 'btn-solid');
-      toolbar.appendChild(tb.escape);
+      /* 「保留转义」切换钮与「主题」循环钮已按「功能精简」下线（2026-10-19）：
+         保留转义的显示逻辑（opts.keepEscape）原样保留，入口移到设置面板 /
+         选项页的「保留转义写法」勾选；主题档位统一走宿主顶栏右上角那枚
+         三档循环钮（跟随系统 / 浅色 / 深色），经 opts.theme + updateOptions()
+         推进来，applyTheme() 仍照旧把最终档位铺到右栏（深浅一致性不丢）。 */
 
-      tb.theme = tbtn('主题', 'theme', '', function () {
-        var i = THEME_ORDER.indexOf(opts.theme);
-        opts.theme = THEME_ORDER[(i < 0 ? 0 : i + 1) % THEME_ORDER.length];
-        applyTheme();
-        persist({ theme: opts.theme });
-        syncToolbar();
-      }, 'btn-solid');
-      toolbar.appendChild(tb.theme);
+      /* 「美化 / 压缩」输出切换钮已按「功能精简」下线（2026-10-19）：
+         右栏输出恒为美化（缩进展开），要单行文本请用输入栏的「压缩」按钮。
+         内部 outMode / renderCompactText() 机制保留（state.outMode 恒为
+         'pretty'），日后若要恢复入口只需把这段按钮加回来。 */
 
-      tb.mode = tbtn('压缩', null, '', function () {
-        state.outMode = state.outMode === 'compact' ? 'pretty' : 'compact';
-        outCache.key = null;   // 输出模式变了，序列化缓存失效
-        syncToolbar();
-        /* 必须重渲染。旧版这一步只切一个 CSS class（靠 CSS 把嵌套 DOM 塌缩成
-           一行），虚拟化之后树里只有视口那几十行，CSS 已经表达不了「整篇压缩成
-           一行」这件事了，改由 render() 换成紧凑文本视图。 */
-        render();
-      }, 'btn-solid');
-      toolbar.appendChild(tb.mode);
-
-      /* 切到「可编辑」：整块右栏换成可编辑的格式化文本。宿主网页上的浮层
-         不接这个钩子（onEditRequest 为空），所以那里只会保留双击就地改。 */
-      if (typeof opts.onEditRequest === 'function') {
-        tb.edit = tbtn('编辑', 'edit',
-          '切换到编辑模式（也可以直接双击这里的键名或值就地修改）',
-          function () { opts.onEditRequest(); }, 'btn-solid');
-        toolbar.appendChild(tb.edit);
-      }
+      /* 树工具条上的「编辑」按钮已按「功能精简」下线（2026-10-19）：进 / 出编辑
+         统一走宿主顶栏那枚「编辑 ⇄ 完成编辑」钮（它本来就能双向切换，且不随右栏
+         当前是树视图还是全文视图而隐藏）。onEditRequest 钩子本身保留——调用方
+         若想把入口放回工具条，重新接上即可；宿主网页上的浮层不接这个钩子，
+         那边始终只有双击就地改。 */
 
       /* 「文本」按钮：切到完整文本视图（大 JSON 的快速全文视图）。只有调用方提供
          onTextViewRequest（编辑器内建大文档视图）时才出现；弹窗 / 站点浮层没有这个
@@ -649,31 +622,6 @@
         downloadJson();
       }, 'btn-outline');
       toolbar.appendChild(tb.download);
-
-      syncToolbar();
-    }
-
-    /** 刷新三个切换按钮的文案与高亮态（保留转义 / 主题 / 压缩） */
-    function syncToolbar() {
-      if (tb.escape) {
-        tb.escape.classList.toggle('jf-btn-on', !!opts.keepEscape);
-        tb.escape.title = opts.keepEscape
-          ? '保留转义：已开启（点击关闭，\\n、\\uXXXX 还原为真实字符）'
-          : '保留转义：已关闭（点击开启，原样显示 \\n、\\uXXXX 等写法）';
-      }
-      if (tb.theme) {
-        setBtnLabel(tb.theme, THEME_NAMES[opts.theme] || '主题');
-        tb.theme.classList.toggle('jf-btn-on', opts.theme !== 'auto');
-        tb.theme.title = '主题：' + (THEME_NAMES[opts.theme] || '跟随系统') + '（点击切换）';
-      }
-      if (tb.mode) {
-        var compact = state.outMode === 'compact';
-        setBtnLabel(tb.mode, compact ? '压缩' : '美化');
-        tb.mode.classList.toggle('jf-btn-on', compact);
-        tb.mode.title = compact
-          ? '输出：压缩（单行）——点击切换为美化'
-          : '输出：美化（缩进展开）——点击切换为压缩';
-      }
     }
 
     /* ---------------- 主题与字号 ---------------- */
@@ -707,10 +655,6 @@
         layout();
         updateWindow(true);
       }
-    }
-
-    function persist(patch) {
-      if (typeof opts.onSettingsChange === 'function') opts.onSettingsChange(patch);
     }
 
     /* ---------------- 文本呈现 ---------------- */
@@ -1673,7 +1617,6 @@
       outCache.key = null;
       applyTheme();
       applyFont();
-      syncToolbar();
       if (state.root) {
         render();
       }
