@@ -586,18 +586,9 @@
          若想把入口放回工具条，重新接上即可；宿主网页上的浮层不接这个钩子，
          那边始终只有双击就地改。 */
 
-      /* 「文本」按钮：切到完整文本视图（大 JSON 的快速全文视图）。只有调用方提供
-         onTextViewRequest（编辑器内建大文档视图）时才出现；弹窗 / 站点浮层没有这个
-         对口，不显示，行为与原先完全一致。 */
-      if (typeof opts.onTextViewRequest === 'function') {
-        tb.text = tbtn('文本', null,
-          '切换到完整文本视图（大 JSON 的快速全文视图）',
-          function () { opts.onTextViewRequest(); }, 'btn-solid');
-        toolbar.appendChild(tb.text);
-      }
-
       /* 展开层级下拉：默认全部展开；选 N 可只展开前 N 层，深层收成摘要。
-         大 JSON 收起深层嵌套后行表骤减，滚动/搜索都更轻。 */
+         大 JSON 收起深层嵌套后行表骤减，滚动/搜索都更轻。
+         注：查看模式已统一走树视图（含大 JSON），「文本」切到全文视图的入口已移除。 */
       tb.levelLabel = el('span', 'jf-level-label', '层级');
       tb.level = el('select', 'jf-level');
       tb.level.setAttribute('aria-label', '展开层级');

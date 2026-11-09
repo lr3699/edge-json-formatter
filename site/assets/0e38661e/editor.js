@@ -275,8 +275,6 @@
       },
       /* 树工具条上的「编辑」按钮已下线（2026-10-19）：进 / 出编辑只走顶栏
          「编辑 ⇄ 完成编辑」钮（setEditMode 双向切换），右栏不再放第二个入口。 */
-      // 树视图工具条上的「文本」按钮：从树视图切回完整文本（大文档）视图
-      onTextViewRequest: function () { setBigMode(true); },
       onThemeChange: function (resolved, raw) {
         // 让主题作用到整个页面（顶栏 / 输入面板 / 背景），而不是只有右侧查看器。
         // resolved 是「auto」折算后的实际主题（light|dark），raw 是用户选的档位。
@@ -383,11 +381,8 @@
 
   var bigHost = $('bigView');
   var bigView = null;
-  /** null = 自动判断；true/false = 用户在设置里手动指定 */
-  var bigMode = null;
-  /** 超过这个体积默认走大文档视图。600KB 的 JSON 树视图已接近千行，滚动开始发涩 */
-  var BIG_MIN_CHARS = 600 * 1024;
-  /** 大文档视图可用时，自动格式化的体积上限放宽到 64MB（虚拟化渲染与行数无关） */
+  /** 编辑模式（CodeMirror 虚拟化视图）可用时，自动格式化的体积上限放宽到 64MB
+      （虚拟化渲染与行数无关）；查看模式走树视图，用 settings.maxAutoSize 当上限。 */
   var BIG_AUTO_MAX = 64 * 1024 * 1024;
 
   function resolvedTheme() {
@@ -400,27 +395,12 @@
   }
 
   /**
-   * 是否该用大文档视图。
-   *
-   * 不再拿 hasRawRisk 当门槛：bigview.js 内部把排版分成两条路——没有「写不回去
-   * 的写法」时用原生 JSON.parse + JSON.stringify（最快），命中 \uXXXX / \/ /
-   * 16 位以上整数时改用字符扫描（只加换行缩进，原文字节级保留）。所以带大整数
-   * 的大文档也能进虚拟化视图，不会再像以前那样退回几十秒才建完的树视图。
-   */
-  function useBigView(text) {
-    if (!NS.hasBigView) return false;
-    if (bigMode === false) return false;
-    if (bigMode === true) return true;
-    return text.length >= BIG_MIN_CHARS;
-  }
-
-  /**
-   * 自动格式化的体积上限。大文档视图可用时放宽到 64MB：
-   * 虚拟化渲染与文档行数无关，20MB 的大写按旧上限只会得到一句「内容过大」，
-   * 那正是用户抱怨「大 JSON 点了半天看不到完整结果」的来源之一。
+   * 自动格式化的体积上限。查看模式走树视图，用 settings.maxAutoSize（默认 20MB，
+   * 树视图一节点一行 DOM，再大就卡）当上限；编辑模式走 CodeMirror 虚拟化视图，
+   * 放宽到 64MB（虚拟化渲染与行数无关）。
    */
   function autoSizeLimit() {
-    if (NS.hasBigView && bigMode !== false) {
+    if (editMode) {
       return Math.max(settings.maxAutoSize, BIG_AUTO_MAX);
     }
     return settings.maxAutoSize;
@@ -447,20 +427,6 @@
     // 工具条是可选装饰：宿主里没这个节点也不能连累正文渲染
     // （曾经就因为它是 null，这里一抛异常，整段格式化结果都不显示）
     if (bigToolbarEl) bigToolbarEl.hidden = true;
-  }
-
-  /* 树视图 ⇄ 大文档（全文）视图的手动切换。
-     大 JSON 默认走全文视图（毫秒级、可搜索/折叠/编辑）；但用户可能想按层级看结构，
-     于是大工具条上有「树视图」按钮切到树视图（bigMode=false，树上带「层级」下拉），
-     树工具条上有「文本」按钮切回全文（bigMode=true）。切完按当前源立即重排一次。
-     这个选择「粘性」：一直生效到再次手动切换，或在左栏改动内容时重置为自动
-     （见输入 / 粘贴事件里的 bigMode = null）。force=true 让超大内容也照排，
-     不被「内容过大」的自动上限挡住。 */
-  function setBigMode(mode) {
-    bigMode = mode;
-    if (!sourceText.trim()) return;
-    format(true);
-    syncBigToolbar();
   }
 
   /* ---------------- 查看 / 编辑模式 ----------------
@@ -607,12 +573,13 @@
     syncEditButton();
   }
 
-  /* ---------------- 大文档视图的工具条 ----------------
+  /* ---------------- 编辑模式（CodeMirror）的工具条 ----------------
    * bigview.js 只把 CodeMirror 放进宿主，自己不建任何 DOM；树视图那条工具条又随
-   * #viewer 一起被 hidden。于是「大文档」下复制 / 下载 / 搜索 / 折叠全都点不到
-   * ——这正是用户反馈的「大 JSON 格式化后按钮丢了」。
-   * 这里补一条与大视图配套的工具条，按钮直连 bigview 的公开 API，配色沿用
+   * #viewer 一起被 hidden。于是「编辑模式」下复制 / 下载 / 搜索 / 折叠全都点不到
+   * —— 这里补一条与编辑器配套的工具条，按钮直连 bigview 的公开 API，配色沿用
    * 树视图那一套 --jf-* token（见 viewer.js 的 .jf-bigtoolbar）。
+   * 注意：查看模式已统一走树视图（含大 JSON），不再有「全文视图」切换，
+   * 所以这条工具条只在编辑模式（顶栏「编辑」）下出现。
    */
   var bigToolbarEl = $('bigToolbar');
   var bt = {};
@@ -642,13 +609,6 @@
 
   function buildBigToolbar() {
     if (!bigToolbarEl || bigToolbarEl.childNodes.length) return;
-
-    // 「树视图」：大 JSON 默认走这个全文视图（毫秒级）；想看结构 + 「层级」下拉时，
-    // 点它切到树视图。树工具条上有对应的「文本」按钮可切回来。
-    bt.tree = btBtn('树视图', null, '切换到树视图（带「层级」下拉，可按深度展开 / 折叠）', function () {
-      setBigMode(false);
-    }, 'btn-solid');
-    bigToolbarEl.appendChild(bt.tree);
 
     bt.search = btBtn('搜索', null, '在结果里查找（Ctrl+F）', function () {
       if (bigView) { bigView.openSearch(); bigView.focus(); }
@@ -887,13 +847,9 @@
       return;
     }
 
-    /* 大文档走 CodeMirror 虚拟化视图：树视图是一节点一行 DOM，
-       20MB JSON 是 61 万行，分帧建完要几十秒；虚拟化只画可见的几十行。 */
-    if (useBigView(text)) {
-      lastRendered = text;
-      doFormatBig(text);
-      return;
-    }
+    /* 查看模式一律走树视图（含大 JSON）：树视图惰性展开，默认只展开前几层，
+       深层不物化，几十 MB 也能跟上；超过上限（settings.maxAutoSize）由
+       autoSizeLimit() 提前拦下，提示用户按 Ctrl+Enter 强制或进编辑模式。 */
 
     var v = ensureViewer();
 
@@ -957,7 +913,6 @@
     // 大输入模式下 textarea 已被隐藏，不会有 input 事件；正常路径下
     // 直接读 textarea 的值作为内存源（小文本，实时编辑）。
     sourceText = inputEl.value;
-    bigMode = null;               // 左栏内容是新的：恢复「按体积自动选视图」
     syncEditButton();             // 有内容了，「编辑」钮就该亮起来
     if (e && e.inputType === 'insertFromPaste') inputKind = 'paste';
     scheduleFormat();
@@ -974,7 +929,6 @@
     if (!text || text.length <= BIG_INPUT_THRESHOLD) return; // 小文本走 textarea 默认路径
     e.preventDefault();                 // 阻止浏览器把大文本塞进 textarea
     setInputText(text);
-    bigMode = null;                     // 新粘贴的内容：恢复「按体积自动选视图」
     inputKind = 'paste';
     scheduleFormat(true);               // 大文本粘贴不需要防抖，立即格式化
   });

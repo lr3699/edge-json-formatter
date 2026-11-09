@@ -95,17 +95,11 @@
   NS.EDITOR_PAGE = 'src/editor/editor.html';
 
   /**
-   * 打开独立编辑页。已经打开过就复用同一个标签页并聚焦，
-   * 避免用户点几次就攒出一排重复页面。
+   * 打开独立编辑页。
    *
-   * 为什么不用 tabs.query 找已开的页面：
-   *   1) 带 `{url}` 过滤器需要 "tabs" 权限，否则过滤器被静默忽略；
-   *   2) 不带过滤器时，没有 "tabs" 权限就读不到 tab.url ——
-   *      连本扩展自己的页面也读不到，所以按 URL 比对永远匹配不上。
-   * 为了不为一处体验去申请 "tabs" 权限（会多一条权限说明），
-   * 改用 runtime.getContexts()：专门用来枚举「哪些标签页里跑着本扩展的页面」，
-   * 返回的 documentUrl / tabId / windowId 都不需要额外权限。
-   * 该方法自 Chrome/Edge 116 起可用；更老的版本退化为每次都新开一个标签页。
+   * 行为约定：**每次点击工具栏图标都重新打开一个全新的编辑页标签**，
+   * 不复用、不聚焦已有的编辑页。这样用户点几次就能并排多个独立编辑实例，
+   * 互不覆盖上次的内容。
    *
    * 只在有 chrome.tabs 的环境（popup / options / service worker）里可用；
    * content script 注入的页面里调用会静默返回，不会抛错。
@@ -116,39 +110,6 @@
       return;
     }
     var url = chrome.runtime.getURL(NS.EDITOR_PAGE);
-
-    function focusTab(tabId, windowId) {
-      chrome.tabs.update(tabId, { active: true }, function () {
-        if (chrome.runtime.lastError) return;
-        if (windowId !== undefined && windowId >= 0 && chrome.windows) {
-          chrome.windows.update(windowId, { focused: true }, function () {
-            void chrome.runtime.lastError;
-          });
-        }
-      });
-    }
-
-    function create() {
-      chrome.tabs.create({ url: url }, function () { void chrome.runtime.lastError; });
-    }
-
-    if (typeof chrome.runtime.getContexts !== 'function') {
-      create();
-      return;
-    }
-
-    chrome.runtime.getContexts(
-      { contextTypes: ['TAB'], documentUrls: [url] },
-      function (contexts) {
-        if (chrome.runtime.lastError) { /* 忽略：当作没开过 */ }
-        var hit = null;
-        for (var i = 0; i < (contexts || []).length; i++) {
-          var ctx = contexts[i];
-          if (typeof ctx.tabId === 'number' && ctx.tabId >= 0) { hit = ctx; break; }
-        }
-        if (hit) focusTab(hit.tabId, hit.windowId);
-        else create();
-      }
-    );
+    chrome.tabs.create({ url: url }, function () { void chrome.runtime.lastError; });
   };
 })();
