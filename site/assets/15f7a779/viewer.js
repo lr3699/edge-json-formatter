@@ -216,13 +216,19 @@
     '  background:var(--jf-accent-soft);color:var(--jf-accent);}',
     /* 启用状态：保留转义开启 / 输出为压缩 / 手动指定主题 */
     '.jf-btn-solid.jf-btn-on{border-color:var(--jf-accent);background:var(--jf-accent-soft);',
+    '  color:var(--jf-accent);}',
     '.jf-search{height:30px;padding:0 10px;border:1px solid var(--jf-border-strong);border-radius:6px;',
     '  background:var(--jf-bg);color:var(--jf-fg);font-size:13px;min-width:130px;outline:none;}',
+    '.jf-search[hidden]{display:none;}',
     '.jf-search:focus{border-color:var(--jf-accent);}',
     '.jf-search-count{font-size:12px;color:var(--jf-muted);white-space:nowrap;margin:0 2px;}',
     '.jf-row.jf-search-hit{background:var(--jf-accent-soft);}',
     '.jf-row.jf-search-hit .jf-key,.jf-row.jf-search-hit .jf-val{outline:1px solid var(--jf-accent);border-radius:3px;}',
-    '  color:var(--jf-accent);}',
+    /* 折行：仍然保持「定高行」，只是把行高统一放大到两行并让值最多显示两行。
+       这样虚拟化的「第 i 行 = i × 行高」坐标系不变，滚动/搜索跳转全都不用改。 */
+    '.jf-root[data-wrap="1"] .jf-content{white-space:pre-wrap;word-break:break-all;',
+    '  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;',
+    '  text-overflow:clip;overflow:hidden;max-height:calc(var(--jf-lh) * 2);}',
 
     /* 工具栏「展开层级」下拉：复用工具栏实心按钮的视觉语言，靠主题变量自适应深浅 */
     '.jf-level-label{font-size:12.5px;color:var(--jf-muted);user-select:none;',
@@ -258,7 +264,7 @@
     /* 一行 = 定高 + 不换行 + 溢出裁掉。
        定高是虚拟化的前提：「第 i 行在哪儿、spacer 该多高」全靠行高算出来。
        代价是长值不再自动折行，超出部分裁掉，全文交给悬停提示与点击复制。 */
-    '.jf-row{display:flex;align-items:flex-start;height:var(--jf-lh);',
+    '.jf-row{display:flex;align-items:flex-start;height:var(--jf-row-h,var(--jf-lh));',
     '  line-height:var(--jf-lh);white-space:nowrap;overflow:hidden;border-radius:4px;',
     '  padding-left:calc(3px + var(--jf-depth,0) * (var(--jf-indent) + 3px));',
     '  padding-right:3px;',
@@ -558,6 +564,31 @@
     statusBar.appendChild(statsLabel);
 
     /* ---------------- 工具栏 ---------------- */
+
+    /** 搜索框展开 / 收起；收起时清空输入，匹配状态由调用方 runSearch('') 重置 */
+    function setSearchOpen(open) {
+      if (!tb.searchInput) return;
+      tb.searchInput.hidden = !open;
+      if (!open) tb.searchInput.value = '';
+      if (tb.search) tb.search.classList.toggle('jf-btn-on', !!open);
+    }
+
+    /** 开关类按钮的选中态统一从 opts 刷新。
+        设置面板 / 编辑模式工具条改了同一份设置后，updateOptions() 也会走到这里。 */
+    function syncToolbarToggles() {
+      if (tb.lineno) {
+        tb.lineno.classList.toggle('jf-btn-on', !!opts.lineNumbers);
+        tb.lineno.title = '显示行号：' + (opts.lineNumbers ? '已开启' : '已关闭') + '（点击切换）';
+      }
+      if (tb.wrap) {
+        tb.wrap.classList.toggle('jf-btn-on', !!opts.wrap);
+        tb.wrap.title = opts.wrap
+          ? '长值折成两行显示（已开启，点击恢复单行）'
+          : '长值折成两行显示（点击开启）';
+      }
+      rootEl.setAttribute('data-wrap', opts.wrap ? '1' : '0');
+    }
+
     function tbtn(label, icon, title, handler, variant) {
       var b = el('button', 'jf-btn' + (variant ? ' jf-' + variant : '') + (label ? '' : ' jf-btn-icon'));
       b.type = 'button';
@@ -592,25 +623,25 @@
          若想把入口放回工具条，重新接上即可；宿主网页上的浮层不接这个钩子，
          那边始终只有双击就地改。 */
 
-      /* 展开层级下拉：默认全部展开；选 N 可只展开前 N 层，深层收成摘要。
-         大 JSON 收起深层嵌套后行表骤减，滚动/搜索都更轻。
-         注：查看模式已统一走树视图（含大 JSON），「文本」切到全文视图的入口已移除。 */
-      tb.levelLabel = el('span', 'jf-level-label', '层级');
-      tb.level = el('select', 'jf-level');
-      tb.level.setAttribute('aria-label', '展开层级');
-      tb.level.title = '展开层级：默认全部展开；选择数字 N 可只展开前 N 层，更深的嵌套收成 {…} / […] 摘要';
-      populateLevelOptions();          // 解析前先放占位（仅「全部展开」）
-      tb.level.addEventListener('change', function () {
-        var v = tb.level.value;
-        applyExpandLevel(v === 'all' ? 'all' : Number(v));
-      });
-      toolbar.appendChild(tb.levelLabel);
-      toolbar.appendChild(tb.level);
+      /* 按钮顺序对齐编辑模式工具条：搜索 / 折叠全部 / 行号 / 折行，
+         末尾再「额外」追加展开层级下拉。查看模式已统一为单一天然树视图，
+         不再有树⇄文本切换（1.1.14 移除）。 */
+      tb.search = tbtn('搜索', null,
+        '在树内查找（回车下一个 / Shift+回车上一个 / Esc 关闭）',
+        function () {
+          var open = tb.searchInput.hidden;
+          setSearchOpen(open);
+          if (open) tb.searchInput.focus();
+          else runSearch('');
+        }, 'btn-solid');
+      toolbar.appendChild(tb.search);
 
-      /* 搜索：虚拟树内对「已展开行」做文本匹配（折叠分支不搜，先展开或选「全部展开」再搜） */
+      /* 搜索框点「搜索」才展开：四个按钮保持常驻，不被输入框挤掉。
+         虚拟树内对「已展开行」做路径+键+值匹配（折叠分支不搜）。 */
       tb.searchInput = el('input', 'jf-search');
       tb.searchInput.type = 'search';
       tb.searchInput.placeholder = '搜索…';
+      tb.searchInput.hidden = true;
       tb.searchInput.setAttribute('aria-label', '搜索 JSON 内容');
       var searchTimer = 0;
       tb.searchInput.addEventListener('input', function () {
@@ -620,7 +651,11 @@
       });
       tb.searchInput.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') { e.preventDefault(); gotoSearch(e.shiftKey ? -1 : 1); }
-        else if (e.key === 'Escape') { tb.searchInput.value = ''; runSearch(''); tb.searchInput.blur(); }
+        else if (e.key === 'Escape') {
+          setSearchOpen(false);
+          runSearch('');
+          tb.searchInput.blur();
+        }
       });
       toolbar.appendChild(tb.searchInput);
       tb.searchCount = el('span', 'jf-search-count', '');
@@ -642,12 +677,35 @@
         opts.lineNumbers = !opts.lineNumbers;
         updateOptions({ lineNumbers: opts.lineNumbers });
         if (opts.onSettingsChange) opts.onSettingsChange({ lineNumbers: opts.lineNumbers });
-        tb.lineno.classList.toggle('jf-btn-on', !!opts.lineNumbers);
-        tb.lineno.title = '显示行号：' + (opts.lineNumbers ? '已开启' : '已关闭') + '（点击切换）';
+        syncToolbarToggles();
       }, 'btn-solid');
-      tb.lineno.classList.toggle('jf-btn-on', !!opts.lineNumbers);
-      tb.lineno.title = '显示行号：' + (opts.lineNumbers ? '已开启' : '已关闭') + '（点击切换）';
       toolbar.appendChild(tb.lineno);
+
+      /* 折行：长值最多显示两行，行盒固定两行高（仍是定高虚拟化）。
+         与编辑模式共用 settings.wrap，切换即回写持久化。 */
+      tb.wrap = tbtn('折行', null, '长值折成两行显示（再次点击恢复单行）', function () {
+        opts.wrap = !opts.wrap;
+        updateOptions({ wrap: opts.wrap });
+        if (opts.onSettingsChange) opts.onSettingsChange({ wrap: opts.wrap });
+        syncToolbarToggles();
+      }, 'btn-solid');
+      toolbar.appendChild(tb.wrap);
+
+      /* 展开层级下拉（额外）：默认全部展开；选 N 可只展开前 N 层，深层收成摘要。
+         大 JSON 收起深层嵌套后行表骤减，滚动/搜索都更轻。 */
+      tb.levelLabel = el('span', 'jf-level-label', '层级');
+      tb.level = el('select', 'jf-level');
+      tb.level.setAttribute('aria-label', '展开层级');
+      tb.level.title = '展开层级：默认全部展开；选择数字 N 可只展开前 N 层，更深的嵌套收成 {…} / […] 摘要';
+      populateLevelOptions();          // 解析前先放占位（仅「全部展开」）
+      tb.level.addEventListener('change', function () {
+        var v = tb.level.value;
+        applyExpandLevel(v === 'all' ? 'all' : Number(v));
+      });
+      toolbar.appendChild(tb.levelLabel);
+      toolbar.appendChild(tb.level);
+
+      syncToolbarToggles();
 
       toolbar.appendChild(el('div', 'jf-spacer'));
 
@@ -686,7 +744,12 @@
       rootEl.style.fontSize = size + 'px';
       // 行高跟着字号走，但取整成 px：小数行高会让每一行的基线落在分数设备
       // 像素上，整段文字读起来就是「发虚」。14px 字号 → 24px 行高。
-      rootEl.style.setProperty('--jf-lh', Math.round(size * LINE_RATIO) + 'px');
+      var lh = Math.round(size * LINE_RATIO);
+      rootEl.style.setProperty('--jf-lh', lh + 'px');
+      /* 折行时行盒统一放大到两行（值最多两行，见 CSS 的 data-wrap 规则）。
+         --jf-row-h 必须与 rowHeight() 的返回值一致，否则滚动坐标会错位。 */
+      rootEl.style.setProperty('--jf-row-h', (lh * (opts.wrap ? 2 : 1)) + 'px');
+      rootEl.setAttribute('data-wrap', opts.wrap ? '1' : '0');
       // 取消「等宽字体」时换成正文字体栈：同字号下字形更大、笔画更实
       rootEl.style.fontFamily = opts.monoFont === false ? PROSE_FONT : MONO_FONT;
       // 行高就是虚拟化的「坐标系」：字号一改，行高、spacer 高度、窗口位置全要重算
@@ -789,11 +852,12 @@
       };
     }
 
-    /** 行高（px）：必须与 applyFont 写进 --jf-lh 的算法一致，否则窗口会错位 */
+    /** 行高（px）：必须与 applyFont 写进 --jf-row-h 的算法一致，否则窗口会错位。
+        折行开启时固定为两行高，仍是定高虚拟化，不改变滚动坐标系的算法。 */
     function rowHeight() {
       var size = parseInt(opts.fontSize, 10);
       if (!size || size < 8) size = DEFAULT_FONT_SIZE;
-      return Math.round(size * LINE_RATIO);
+      return Math.round(size * LINE_RATIO) * (opts.wrap ? 2 : 1);
     }
 
     function isContainerNode(n) {
@@ -1699,6 +1763,7 @@
       outCache.key = null;
       applyTheme();
       applyFont();
+      syncToolbarToggles();
       if (state.root) {
         render();
       }
