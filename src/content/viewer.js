@@ -216,6 +216,12 @@
     '  background:var(--jf-accent-soft);color:var(--jf-accent);}',
     /* 启用状态：保留转义开启 / 输出为压缩 / 手动指定主题 */
     '.jf-btn-solid.jf-btn-on{border-color:var(--jf-accent);background:var(--jf-accent-soft);',
+    '.jf-search{height:30px;padding:0 10px;border:1px solid var(--jf-border-strong);border-radius:6px;',
+    '  background:var(--jf-bg);color:var(--jf-fg);font-size:13px;min-width:130px;outline:none;}',
+    '.jf-search:focus{border-color:var(--jf-accent);}',
+    '.jf-search-count{font-size:12px;color:var(--jf-muted);white-space:nowrap;margin:0 2px;}',
+    '.jf-row.jf-search-hit{background:var(--jf-accent-soft);}',
+    '.jf-row.jf-search-hit .jf-key,.jf-row.jf-search-hit .jf-val{outline:1px solid var(--jf-accent);border-radius:3px;}',
     '  color:var(--jf-accent);}',
 
     /* 工具栏「展开层级」下拉：复用工具栏实心按钮的视觉语言，靠主题变量自适应深浅 */
@@ -601,6 +607,48 @@
       toolbar.appendChild(tb.levelLabel);
       toolbar.appendChild(tb.level);
 
+      /* 搜索：虚拟树内对「已展开行」做文本匹配（折叠分支不搜，先展开或选「全部展开」再搜） */
+      tb.searchInput = el('input', 'jf-search');
+      tb.searchInput.type = 'search';
+      tb.searchInput.placeholder = '搜索…';
+      tb.searchInput.setAttribute('aria-label', '搜索 JSON 内容');
+      var searchTimer = 0;
+      tb.searchInput.addEventListener('input', function () {
+        clearTimeout(searchTimer);
+        var v = tb.searchInput.value;
+        searchTimer = setTimeout(function () { runSearch(v); }, 160);
+      });
+      tb.searchInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); gotoSearch(e.shiftKey ? -1 : 1); }
+        else if (e.key === 'Escape') { tb.searchInput.value = ''; runSearch(''); tb.searchInput.blur(); }
+      });
+      toolbar.appendChild(tb.searchInput);
+      tb.searchCount = el('span', 'jf-search-count', '');
+      toolbar.appendChild(tb.searchCount);
+
+      /* 折叠全部 / 展开全部（树视图无「文本」全文视图，折叠靠层级 / 本钮） */
+      tb.foldAll = tbtn('折叠全部', null, '把可折叠的层级全部收起', function () {
+        if (!state.root) return;
+        var expand = tb.foldAll.dataset.expanded === '1';
+        setAllExpanded(expand);
+        tb.foldAll.textContent = expand ? '折叠全部' : '展开全部';
+        tb.foldAll.title = expand ? '把可折叠的层级全部收起' : '把折叠的层级全部展开';
+        tb.foldAll.dataset.expanded = expand ? '' : '1';
+      }, 'btn-solid');
+      toolbar.appendChild(tb.foldAll);
+
+      /* 行号：切换后回写宿主设置（onSettingsChange 持久化），与其它入口共用 settings */
+      tb.lineno = tbtn('行号', null, '', function () {
+        opts.lineNumbers = !opts.lineNumbers;
+        updateOptions({ lineNumbers: opts.lineNumbers });
+        if (opts.onSettingsChange) opts.onSettingsChange({ lineNumbers: opts.lineNumbers });
+        tb.lineno.classList.toggle('jf-btn-on', !!opts.lineNumbers);
+        tb.lineno.title = '显示行号：' + (opts.lineNumbers ? '已开启' : '已关闭') + '（点击切换）';
+      }, 'btn-solid');
+      tb.lineno.classList.toggle('jf-btn-on', !!opts.lineNumbers);
+      tb.lineno.title = '显示行号：' + (opts.lineNumbers ? '已开启' : '已关闭') + '（点击切换）';
+      toolbar.appendChild(tb.lineno);
+
       toolbar.appendChild(el('div', 'jf-spacer'));
 
       tb.copy = tbtn('复制', 'copy', '复制当前输出（美化 / 压缩）', function () {
@@ -775,6 +823,7 @@
       var node = model.nodeAt(i);
       var close = model.isClose(i);
       var row = el('div', 'jf-row');
+      if (i === searchHit) row.classList.add('jf-search-hit');
       row.setAttribute('data-i', String(i));
       row.setAttribute('data-jf-node', String(node.id));
       /* 首屏之后才建的行（滚动补画、折叠重画）不打入场动效的标记：
@@ -1373,6 +1422,48 @@
         sel.appendChild(o);
       }
       sel.value = cur;
+    }
+
+    /* ---------------- 树内搜索 ---------------- */
+    var searchMatches = [];
+    var searchIdx = -1;
+    var searchHit = -1;            // 当前高亮行下标；buildRow 据此加 .jf-search-hit
+
+    function nodeSearchText(node) {
+      if (!node) return '';
+      var p = model && model.pathOf ? model.pathOf(node) : '';
+      var v = '';
+      if (node.type === 'string') v = node.value;
+      else if (node.type === 'number' || node.type === 'boolean' || node.type === 'null') v = String(node.value);
+      else if (node.keyNode) v = keyText(node.keyNode);
+      return (p + ' ' + v).toLowerCase();
+    }
+
+    function updateSearchCount() {
+      if (!tb.searchCount) return;
+      tb.searchCount.textContent = searchMatches.length
+        ? ('第 ' + (searchIdx + 1) + ' / ' + searchMatches.length + ' 个')
+        : (tb.searchInput && tb.searchInput.value.trim() ? '无匹配' : '');
+    }
+
+    function runSearch(raw) {
+      var q = (raw || '').trim().toLowerCase();
+      searchMatches = []; searchIdx = -1; searchHit = -1;
+      if (!q || !model) { updateSearchCount(); updateWindow(true); return; }
+      for (var i = 0; i < model.length; i++) {
+        var node = model.nodeAt(i);
+        if (node && nodeSearchText(node).indexOf(q) >= 0) searchMatches.push(i);
+      }
+      if (searchMatches.length) { searchIdx = 0; gotoSearch(0, true); }
+      else { updateSearchCount(); updateWindow(true); }
+    }
+
+    function gotoSearch(delta, force) {
+      if (!searchMatches.length) { toast('没有匹配'); return; }
+      searchIdx = force ? 0 : (searchIdx + delta + searchMatches.length) % searchMatches.length;
+      searchHit = searchMatches[searchIdx];
+      revealRow(searchHit);          // 内部 updateWindow(true) 重画，buildRow 加高亮
+      updateSearchCount();
     }
 
 
