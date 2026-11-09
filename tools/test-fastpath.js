@@ -28,7 +28,18 @@ for (const file of [
 const parser = fakeGlobal.__EDGE_JSON_FORMATTER__.parser;
 
 let pass = 0, fail = 0;
+function assert(cond, msg) {
+  if (!cond) throw new Error(msg || 'assertion failed');
+}
+/* cond 既可以是布尔，也可以是「带 assert 的断言函数」。
+   2026-11-09 修：原先展开层级那三项传的是函数，check 只做真值判断，
+   函数对象恒为 truthy → 断言一次都没跑过（连 assert 都未定义），
+   是三枚空壳测试，导致「全部展开后再选层级无效」漏到了线上。 */
 function check(name, cond, extra) {
+  if (typeof cond === 'function') {
+    try { cond(); cond = true; }
+    catch (e) { cond = false; extra = (e && e.message) || String(e); }
+  }
   if (cond) { pass++; console.log('  [PASS] ' + name + (extra ? '  ' + extra : '')); }
   else { fail++; console.log('  [FAIL] ' + name + (extra ? '  ' + extra : '')); }
 }
@@ -306,6 +317,57 @@ function run() {
     for (const n of ss.nodes) { if (n.depth >= 2) deep++; else shallow++; }
     assert(deep === 0, 'setExpandLevel 后不应物化 depth>=2 容器，实际=' + deep);
     assert(shallow >= 2, '应物化 root 与 list/meta，实际 shallow=' + shallow);
+  });
+
+  /* 2026-11-09 线上 bug：先「全部展开」（渲染 collect 会把整棵惰性树物化，
+     所有容器都记住 expanded=true），再选「展开 N 层」毫无反应。
+     旧实现只翻 deflt=false + walkToLevel 展开浅层，deflt 管不到已物化节点，
+     walkToLevel 又刻意不下钻深层，于是深层容器一直保持展开。 */
+  check('回归：全部展开（整树已物化）后再设有限层级仍生效', () => {
+    const res = parser.parse(makeBig(2000));
+    assert(usedFastPath(res), '未走快路径');
+    parser.setExpandLevel(res.root, 'all');
+    parser.walk(res.root, () => {});            // 模拟「全部展开」把整棵树物化出来
+    const total = res.root.__sess.nodes.length;
+    assert(total > 100, '整树未物化，容器数=' + total);
+    parser.setExpandLevel(res.root, 2);
+    const m = {};
+    parser.walk(res.root, (n) => {
+      if (n.type === 'object' || n.type === 'array') {
+        m[n.depth] = m[n.depth] || { exp: 0, all: 0 };
+        m[n.depth].all++; if (n.expanded) m[n.depth].exp++;
+      }
+    });
+    assert(m[0].exp === m[0].all, 'depth0 未全展开');
+    assert(m[1].exp === m[1].all, 'depth1 未全展开');
+    for (const d in m) if (+d >= 2) assert(m[d].exp === 0, 'depth ' + d + ' 仍展开（层级切换无效）');
+    assert(res.root.__sess.deflt === false, 'deflt 未置 false');
+  });
+
+  check('回归：全展开后 4 层 → 2 层 → 4 层 反复切换都生效', () => {
+    const res = parser.parse(makeBig(2000));
+    assert(usedFastPath(res), '未走快路径');
+    parser.setExpandLevel(res.root, 'all');
+    parser.walk(res.root, () => {});
+    const at = (level) => {
+      parser.setExpandLevel(res.root, level);
+      const m = {};
+      parser.walk(res.root, (n) => {
+        if (n.type === 'object' || n.type === 'array') {
+          m[n.depth] = m[n.depth] || { exp: 0, all: 0 };
+          m[n.depth].all++; if (n.expanded) m[n.depth].exp++;
+        }
+      });
+      return m;
+    };
+    const m4 = at(4);
+    assert(m4[3] && m4[3].exp === m4[3].all, '4 层：depth3 未展开');
+    for (const d in m4) if (+d >= 4) assert(m4[d].exp === 0, '4 层：depth ' + d + ' 仍展开');
+    const m2 = at(2);
+    assert(m2[1].exp === m2[1].all, '2 层：depth1 未展开');
+    for (const d in m2) if (+d >= 2) assert(m2[d].exp === 0, '2 层：depth ' + d + ' 仍展开');
+    const m4b = at(4);
+    assert(m4b[3].exp === m4b[3].all, '再回 4 层：depth3 未重新展开');
   });
 
   console.log('\n' + pass + ' 通过, ' + fail + ' 失败');

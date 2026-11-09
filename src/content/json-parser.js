@@ -691,7 +691,8 @@
    * 惰性树路径：
    *   · 'all' 只翻 deflt + 已物化容器，渲染时整棵自然展开（不预物化）。
    *   · 有限层级：把「深度 < N」的容器物化并显式展开（浅层前缀，开销可控），
-   *     更深的不下钻——它们靠 deflt=false 在渲染 collect 时自然收起。
+   *     更深的不下钻——未物化的靠 deflt=false 在渲染 collect 时自然收起；
+   *     **已物化的**则先统一显式标 false（否则从「全部展开」切回来毫无反应）。
    *     若只翻 deflt 而不物化浅层，后续物化的根/浅层容器也会拿到 false 被误收。
    *   全程不 walk() 整棵惰性树（那会把 32 万节点物化出来、数百毫秒卡死）。
    */
@@ -704,6 +705,17 @@
       if (all) {
         for (var i = 0; i < sess.nodes.length; i++) sess.nodes[i].expanded = true;
         return;
+      }
+      /* 关键（2026-11-09 修）：此前若选过「全部展开」，渲染 collect 会把整棵
+         惰性树物化，depth >= level 的容器也都带着 expanded=true。deflt=false
+         只决定「之后新物化」节点的初始态，改不动这些既有节点；walkToLevel
+         又刻意不下钻到 depth >= level，根本碰不到它们 —— 于是从「全部展开」
+         切回「展开 N 层」行表一行不减，看起来像下拉失效。
+         先把已物化的深层容器统一收起，再展开浅层前缀。sess.nodes 只存容器，
+         这一遍是 O(已物化容器数)，远比整树 walk() 便宜。 */
+      for (var j = 0; j < sess.nodes.length; j++) {
+        var m = sess.nodes[j];
+        if (m.depth >= level) m.expanded = false;
       }
       walkToLevel(root, level);
       return;
