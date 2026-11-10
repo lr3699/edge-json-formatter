@@ -1,4 +1,4 @@
-# Chrome Web Store 上架清单（JSON Duo 1.1.3）
+# Chrome Web Store 上架清单（JSON 格式化 1.1.3）
 
 > Chrome 网上应用店与 Edge Add-ons 相互独立：包可以复用，但开发者账号、
 > 商品 ID、商店页、审核全部要重来一遍。本文档是 Chrome 侧的完整填写对照表。
@@ -21,13 +21,13 @@
 - 文件：`dist/json-duo-1.1.3.zip`（74.4 KB，与 Edge 同包，manifest 在 zip 根）
 - 兼容性已核对：MV3 / service worker / `chrome.action.onClicked`（无 popup）/
   `runtime.getContexts`（Chrome 116+，老版本有降级分支）/ 无远程代码 / 无 eval
-- 名称上限 75 字符：`JSON Duo` ✔（manifest i18n：zh_CN 默认）
+- 名称上限 75 字符：`JSON 格式化` ✔（manifest i18n：zh_CN 默认）
 
 ## 2. Store listing（商店页）
 
 | 字段 | 内容 |
 | --- | --- |
-| Item name | JSON Duo（取自 manifest） |
+| Item name | JSON 格式化（取自 manifest） |
 | **Summary（摘要，≤132 字符）** | 双栏 JSON 工作台：左栏粘贴原文、右栏实时预览，网页 JSON 自动美化成可折叠的语法高亮树，纯本地运行 |
 | Category（类别） | Developer Tools（开发者工具） |
 | Language（语言） | 中文（简体）—— 与 manifest `default_locale: zh_CN` 一致 |

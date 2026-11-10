@@ -48,9 +48,9 @@ function main() {
   if (!fs.existsSync(manifestPath)) throw new Error('找不到 manifest.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   const version = manifest.version;
-  const zipPath = path.join(DIST, 'json-duo-' + version + '.zip');
+  const zipPath = path.join(DIST, 'json-format-' + version + '.zip');
 
-  console.log('打包 JSON Duo v' + version + '\n');
+  console.log('打包 JSON 格式化 v' + version + '\n');
 
   rmrf(STAGE);
   fs.mkdirSync(STAGE, { recursive: true });

@@ -2,13 +2,13 @@
 
 > 本扩展通过 manifest 的 `default_locale: zh_CN` + `_locales` i18n 提供中英文，
 > Partner Center 会识别出「中文（简体）」与「英文」两种语言。下方中文为默认主语言。
-> 扩展名统一为 **JSON Duo**。
+> 扩展名统一为 **JSON 格式化**。
 
 ## 基本信息
 
 | 字段 | 内容 |
 | --- | --- |
-| Extension name | JSON Duo（取自 manifest，只读） |
+| Extension name | JSON 格式化（取自 manifest，只读） |
 | Short description | 双栏 JSON 工作台：左栏粘贴原文、右栏实时预览（取自 manifest.description） |
 | Category | Developer tools |
 | Supported languages | 中文（简体）+ English |
@@ -19,7 +19,7 @@
 ## Description（详细描述 · 中文主文案，粘贴到 Store listings → Description）
 
 ```
-JSON Duo 是一把「双栏」的 JSON 瑞士军刀：左边粘贴、右边实时预览，网页上的 JSON 也能自动接手。
+JSON 格式化 是一把「双栏」的 JSON 瑞士军刀：左边粘贴、右边实时预览，网页上的 JSON 也能自动接手。
 
 不用再眯着眼看那一大坨挤在一行的 minified JSON。装上之后，凡是网页返回的 JSON，都会自动变成一张可以逐层展开、带语法高亮的树；你自己复制下来的 JSON，也只需 Ctrl+V 贴进内置编辑页，右栏立刻出结果。
 
@@ -144,7 +144,7 @@ JSON 美化
 ### Description
 
 ```
-JSON Duo is a dual-pane JSON workbench: paste raw JSON on the left, see it rendered live on the right — and auto-takeover for JSON on any page.
+JSON 格式化 is a dual-pane JSON workbench: paste raw JSON on the left, see it rendered live on the right — and auto-takeover for JSON on any page.
 
 Stop squinting at one endless line of minified JSON. Any JSON response in your browser is instantly turned into a collapsible, syntax-highlighted tree; anything you copied from logs, chat or a terminal goes into the built-in editor with live preview.
 
@@ -178,7 +178,7 @@ JSON tree
 ### Notes for certification
 
 ```
-JSON Duo is a client-side JSON viewer. No account, credentials or special setup is required.
+JSON 格式化 is a client-side JSON viewer. No account, credentials or special setup is required.
 
 HOW TO TEST
 1. Install and open a public JSON endpoint, e.g. https://jsonplaceholder.typicode.com/todos/1 — it should render as a collapsible, syntax-highlighted tree.

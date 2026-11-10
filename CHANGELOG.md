@@ -2,6 +2,18 @@
 
 ## 未发布
 
+### 变更 · 更名「JSON 格式化」
+
+- **扩展名 / 站点品牌统一改为「JSON 格式化」**（原 `JSON Duo`）。
+  `_locales/zh_CN` 与 `_locales/en` 的 `extName` / `extShortName` / `extTitle` 同步改；
+  `manifest.json` 的 `name` 仍是 `__MSG_extName__`，无需改动。
+- 扩展页（editor / popup / options）、站点（app / index / privacy）、README、隐私政策、
+  商店 listing 文案与提交填表数据一并改名，共 49 处。
+- **图标不变**：16/32px 单字母 J、48/128px「JSON」+ 角括号，图形里不含旧品牌名。
+- 历史归档（本文件历史条目、`docs/SUBMISSION.md`、设计比稿与原型）保留旧名，属事实记录。
+- 商店推广图源 `docs/promo-tiles.html` 文案已改；`docs/chrome-assets/*.png` 未重新生成，
+  商店里已上传的图仍是旧名，需另行重生成 + 上传。
+
 ### 修复 · 大 JSON「全部展开」后再选「展开 N 层」无效
 
 - **现象**：大 JSON 选「全部展开」后，再选「展开 2 / 4 层」行表一行不减，像下拉失效。

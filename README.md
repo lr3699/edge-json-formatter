@@ -1,4 +1,4 @@
-# JSON Duo · 双栏 JSON 工作台
+# JSON 格式化 · 双栏 JSON 工作台
 
 一个 Microsoft Edge / Chrome 扩展（Manifest V3）：自动识别网页返回的 JSON，替换成带语法高亮、可折叠树的查看器；内置双栏编辑页，粘贴自己复制的 JSON 也能即时格式化。
 

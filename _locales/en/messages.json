@@ -1,10 +1,10 @@
 {
   "extName": {
-    "message": "JSON Duo",
+    "message": "JSON 格式化",
     "description": "Extension name"
   },
   "extShortName": {
-    "message": "JSON Duo",
+    "message": "JSON 格式化",
     "description": "Extension short name"
   },
   "extDescription": {
@@ -12,7 +12,7 @@
     "description": "Extension description"
   },
   "extTitle": {
-    "message": "JSON Duo",
+    "message": "JSON 格式化",
     "description": "Toolbar icon hover title"
   }
 }

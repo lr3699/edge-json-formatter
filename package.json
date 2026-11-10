@@ -1,6 +1,6 @@
 {
   "private": true,
-  "description": "JSON Duo 的构建期依赖。运行期代码全是仓库内的纯 JS，这里只用于重新生成 src/vendor/codemirror.bundle.js。",
+  "description": "JSON 格式化 的构建期依赖。运行期代码全是仓库内的纯 JS，这里只用于重新生成 src/vendor/codemirror.bundle.js。",
   "scripts": {
     "build:vendor": "node tools/build-vendor.js",
     "build": "node tools/build.js",
